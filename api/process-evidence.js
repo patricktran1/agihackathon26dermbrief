@@ -116,12 +116,12 @@ function makeCard(article, score) {
 function events(article, score) {
   const time = () => new Date().toISOString().slice(11, 19)
   return [
-    { sequence: 1, timestamp: time(), sender: 'scout', recipient: '#evidenceops', kind: 'multicast', phase: 'Discovery', message: `PMID ${article.pmid} retrieved from ${article.journal}; whitelist identity verified.`, signatureVerified: true },
-    { sequence: 2, timestamp: time(), sender: 'scout', recipient: 'appraiser', kind: 'unicast', phase: 'Handoff', message: 'Verified metadata and abstract handed to evidence appraisal.', signatureVerified: true },
-    { sequence: 3, timestamp: time(), sender: 'appraiser', recipient: '#evidenceops', kind: 'multicast', phase: 'Appraisal', message: `Deterministic evidence score: ${score}/100.`, signatureVerified: true },
-    { sequence: 4, timestamp: time(), sender: 'appraiser', recipient: 'grounder', kind: 'anycast', phase: 'Delegation', message: 'Create one defensible learning card bounded by the abstract.', signatureVerified: true },
-    { sequence: 5, timestamp: time(), sender: 'grounder', recipient: 'auditor', kind: 'unicast', phase: 'Grounding', message: 'Card and claim-level source mappings submitted for safety review.', signatureVerified: true },
-    { sequence: 6, timestamp: time(), sender: 'auditor', recipient: '#evidenceops', kind: 'multicast', phase: 'Safety', message: 'Source strings verified. Publisher blocked until physician approval.', signatureVerified: true },
+    { sequence: 1, timestamp: time(), sender: 'scout', recipient: 'workflow', kind: 'checkpoint', phase: 'Discovery', message: `PMID ${article.pmid} retrieved from ${article.journal}; whitelist identity verified.`, sourceVerified: true },
+    { sequence: 2, timestamp: time(), sender: 'scout', recipient: 'appraiser', kind: 'handoff', phase: 'Handoff', message: 'Verified metadata and abstract passed to evidence appraisal.', sourceVerified: true },
+    { sequence: 3, timestamp: time(), sender: 'appraiser', recipient: 'workflow', kind: 'checkpoint', phase: 'Appraisal', message: `Deterministic evidence score: ${score}/100.`, sourceVerified: true },
+    { sequence: 4, timestamp: time(), sender: 'appraiser', recipient: 'grounder', kind: 'handoff', phase: 'Delegation', message: 'Create one defensible learning card bounded by the abstract.', sourceVerified: true },
+    { sequence: 5, timestamp: time(), sender: 'grounder', recipient: 'auditor', kind: 'handoff', phase: 'Grounding', message: 'Card and claim-level source mappings submitted for safety review.', sourceVerified: true },
+    { sequence: 6, timestamp: time(), sender: 'auditor', recipient: 'publisher', kind: 'checkpoint', phase: 'Safety', message: 'Source strings verified. Publisher blocked until physician approval.', sourceVerified: true },
   ]
 }
 
@@ -179,6 +179,7 @@ export default {
         startedAt,
         completedAt: new Date().toISOString(),
         status: safe ? 'awaiting_physician' : 'blocked',
+        executionSource: 'vercel-direct',
         score: appraisal.score,
         scoreReasons: appraisal.reasons,
         safetyChecks: [
