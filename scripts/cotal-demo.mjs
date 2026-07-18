@@ -19,6 +19,14 @@ const endpoints = new Map(specs.map(([id, name, role, description]) => [id, new 
   card: { id: `local.${id}`, name, kind: 'agent', role, description, tags: ['dermatology', 'evidenceops', 'hackathon'] },
 })]))
 
+for (const [id, endpoint] of endpoints) {
+  // Cotal endpoints emit asynchronous connection and permission errors.
+  // Register this listener before start() so Node does not treat them as unhandled errors.
+  endpoint.on('error', (error) => {
+    console.error(`[${id}] Cotal error:`, error instanceof Error ? error.message : error)
+  })
+}
+
 const sequence = [
   ['scout', 'multicast', channel, 'PMID 35820547 verified as a JAAD publication.'],
   ['scout', 'unicast', 'appraiser', 'Handing off verified abstract and publication metadata.'],
@@ -34,6 +42,7 @@ async function main() {
 
   for (const [sender, mode, target, message] of sequence) {
     const endpoint = endpoints.get(sender)
+    if (!endpoint) throw new Error(`Unknown endpoint ${sender}`)
     if (mode === 'multicast') await endpoint.multicast(message, { channel: target, contextId: 'pmid-35820547' })
     if (mode === 'unicast') await endpoint.unicast(`local.${target}`, message, { contextId: 'pmid-35820547' })
     if (mode === 'anycast') await endpoint.anycast(target, message, { contextId: 'pmid-35820547' })
@@ -41,11 +50,14 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
 
-  console.log('Cotal demo complete. Open `cotal console` or `cotal web` to replay the signed coordination log.')
-  await Promise.all([...endpoints.values()].map((endpoint) => endpoint.stop()))
+  console.log('Cotal demo complete. Keep `cotal console` or `cotal web` open during the run to watch the coordination live.')
 }
 
-main().catch((error) => {
-  console.error('Cotal demo failed. Start a local mesh first with `cotal up --open --detach`.', error)
-  process.exitCode = 1
-})
+main()
+  .catch((error) => {
+    console.error('Cotal demo failed. Start a loopback demo mesh first with `cotal up --open`.', error)
+    process.exitCode = 1
+  })
+  .finally(async () => {
+    await Promise.allSettled([...endpoints.values()].map((endpoint) => endpoint.stop()))
+  })
