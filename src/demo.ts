@@ -5,6 +5,7 @@ export const demoRun: EvidenceRun = {
   startedAt: '2026-07-18T18:30:00.000Z',
   completedAt: '2026-07-18T18:30:18.000Z',
   status: 'awaiting_physician',
+  executionSource: 'stage-demo',
   score: 92,
   scoreReasons: [
     'Phase 3 randomized controlled trial',
@@ -26,12 +27,12 @@ export const demoRun: EvidenceRun = {
     { id: 'publisher', name: 'Publisher', role: 'Release manager', description: 'Creates a versioned PR only after physician approval.', status: 'waiting' },
   ],
   events: [
-    { sequence: 1, timestamp: '18:30:01', sender: 'scout', recipient: '#evidenceops', kind: 'multicast', message: 'PMID 35820547 retrieved from JAAD and journal identity verified.', signatureVerified: true, phase: 'Discovery' },
-    { sequence: 2, timestamp: '18:30:04', sender: 'scout', recipient: 'appraiser', kind: 'unicast', message: 'Handing off the verified abstract and publication metadata.', signatureVerified: true, phase: 'Handoff' },
-    { sequence: 3, timestamp: '18:30:07', sender: 'appraiser', recipient: '#evidenceops', kind: 'multicast', message: 'Quality score 92/100. Phase 3, randomized, double-blind, placebo and active comparator.', signatureVerified: true, phase: 'Appraisal' },
-    { sequence: 4, timestamp: '18:30:10', sender: 'appraiser', recipient: 'grounder', kind: 'anycast', message: 'Create one clinically useful question without extending beyond the abstract.', signatureVerified: true, phase: 'Delegation' },
-    { sequence: 5, timestamp: '18:30:13', sender: 'grounder', recipient: 'auditor', kind: 'unicast', message: 'Draft complete with five claim-to-source mappings.', signatureVerified: true, phase: 'Grounding' },
-    { sequence: 6, timestamp: '18:30:16', sender: 'auditor', recipient: '#evidenceops', kind: 'multicast', message: 'All source quotes verified. Publisher remains blocked for physician approval.', signatureVerified: true, phase: 'Safety' },
+    { sequence: 1, timestamp: '18:30:01', sender: 'scout', recipient: 'workflow', kind: 'checkpoint', message: 'PMID 35820547 retrieved from JAAD and journal identity verified.', sourceVerified: true, phase: 'Discovery' },
+    { sequence: 2, timestamp: '18:30:04', sender: 'scout', recipient: 'appraiser', kind: 'handoff', message: 'Verified abstract and publication metadata passed to evidence appraisal.', sourceVerified: true, phase: 'Handoff' },
+    { sequence: 3, timestamp: '18:30:07', sender: 'appraiser', recipient: 'workflow', kind: 'checkpoint', message: 'Quality score 92/100. Phase 3, randomized, double-blind, placebo and active comparator.', sourceVerified: true, phase: 'Appraisal' },
+    { sequence: 4, timestamp: '18:30:10', sender: 'appraiser', recipient: 'grounder', kind: 'handoff', message: 'Create one clinically useful question without extending beyond the abstract.', sourceVerified: true, phase: 'Delegation' },
+    { sequence: 5, timestamp: '18:30:13', sender: 'grounder', recipient: 'auditor', kind: 'handoff', message: 'Draft complete with claim-to-source mappings.', sourceVerified: true, phase: 'Grounding' },
+    { sequence: 6, timestamp: '18:30:16', sender: 'auditor', recipient: 'publisher', kind: 'checkpoint', message: 'All source quotes verified. Publisher remains blocked for physician approval.', sourceVerified: true, phase: 'Safety' },
   ],
   article: {
     pmid: '35820547',
