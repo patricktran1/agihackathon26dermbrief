@@ -1,0 +1,27 @@
+{
+  "name": "agihackathon26dermbrief",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "check": "tsc -b --pretty false",
+    "preview": "vite preview",
+    "cotal:demo": "node scripts/cotal-demo.mjs"
+  },
+  "dependencies": {
+    "@cotal-ai/core": "0.12.0",
+    "@insforge/sdk": "1.4.5",
+    "lucide-react": "1.25.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "typescript": "7.0.2",
+    "vite": "8.1.5"
+  }
+}

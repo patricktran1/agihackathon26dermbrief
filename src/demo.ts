@@ -1,0 +1,65 @@
+import type { EvidenceRun } from './types'
+
+export const demoRun: EvidenceRun = {
+  id: 'demo-poetyk-35820547',
+  startedAt: '2026-07-18T18:30:00.000Z',
+  completedAt: '2026-07-18T18:30:18.000Z',
+  status: 'awaiting_physician',
+  score: 92,
+  scoreReasons: [
+    'Phase 3 randomized controlled trial',
+    'Double-blind design',
+    'Placebo and active comparator',
+    'Substantial enrollment and 52-week follow-up',
+  ],
+  safetyChecks: [
+    { label: 'Journal scope', passed: true, detail: 'JAAD is on the curated dermatology whitelist.' },
+    { label: 'Source grounding', passed: true, detail: 'Every substantive claim maps to an abstract excerpt.' },
+    { label: 'Single answer', passed: true, detail: 'Exactly one option is directly supported.' },
+    { label: 'Human boundary', passed: true, detail: 'Publisher is blocked pending physician approval.' },
+  ],
+  agents: [
+    { id: 'scout', name: 'Scout', role: 'Literature scout', description: 'Retrieves and verifies the PubMed record.', status: 'complete' },
+    { id: 'appraiser', name: 'Appraiser', role: 'Evidence appraiser', description: 'Scores design quality, bias, and clinical signal.', status: 'complete' },
+    { id: 'grounder', name: 'Grounder', role: 'Clinical educator', description: 'Builds the card with claim-level evidence links.', status: 'complete' },
+    { id: 'auditor', name: 'Safety Auditor', role: 'Medical safety', description: 'Rejects unsupported language and ambiguity.', status: 'complete' },
+    { id: 'publisher', name: 'Publisher', role: 'Release manager', description: 'Creates a versioned PR only after physician approval.', status: 'waiting' },
+  ],
+  events: [
+    { sequence: 1, timestamp: '18:30:01', sender: 'scout', recipient: '#evidenceops', kind: 'multicast', message: 'PMID 35820547 retrieved from JAAD and journal identity verified.', signatureVerified: true, phase: 'Discovery' },
+    { sequence: 2, timestamp: '18:30:04', sender: 'scout', recipient: 'appraiser', kind: 'unicast', message: 'Handing off the verified abstract and publication metadata.', signatureVerified: true, phase: 'Handoff' },
+    { sequence: 3, timestamp: '18:30:07', sender: 'appraiser', recipient: '#evidenceops', kind: 'multicast', message: 'Quality score 92/100. Phase 3, randomized, double-blind, placebo and active comparator.', signatureVerified: true, phase: 'Appraisal' },
+    { sequence: 4, timestamp: '18:30:10', sender: 'appraiser', recipient: 'grounder', kind: 'anycast', message: 'Create one clinically useful question without extending beyond the abstract.', signatureVerified: true, phase: 'Delegation' },
+    { sequence: 5, timestamp: '18:30:13', sender: 'grounder', recipient: 'auditor', kind: 'unicast', message: 'Draft complete with five claim-to-source mappings.', signatureVerified: true, phase: 'Grounding' },
+    { sequence: 6, timestamp: '18:30:16', sender: 'auditor', recipient: '#evidenceops', kind: 'multicast', message: 'All source quotes verified. Publisher remains blocked for physician approval.', signatureVerified: true, phase: 'Safety' },
+  ],
+  article: {
+    pmid: '35820547',
+    title: 'Deucravacitinib versus placebo and apremilast in moderate to severe plaque psoriasis: POETYK PSO-1',
+    journal: 'Journal of the American Academy of Dermatology',
+    publicationDate: '2023 Jan',
+    authors: ['Armstrong AW', 'Gooderham M', 'Warren RB', 'Papp KA'],
+    doi: '10.1016/j.jaad.2022.07.002',
+    abstract: 'In this 52-week phase 3 trial, adults with moderate-to-severe plaque psoriasis were randomized to deucravacitinib, placebo, or apremilast. At week 16, deucravacitinib produced higher PASI 75 and sPGA 0/1 response rates than both comparators, with efficacy maintained through week 52.',
+    url: 'https://pubmed.ncbi.nlm.nih.gov/35820547/',
+  },
+  card: {
+    title: 'A selective TYK2 inhibitor outperformed placebo and apremilast',
+    prompt: 'At week 16 in POETYK PSO-1, which result was reported for deucravacitinib?',
+    options: [
+      'It improved itch without improving objective psoriasis severity.',
+      'It produced higher PASI 75 and sPGA 0/1 response rates than placebo and apremilast.',
+      'It was inferior to apremilast for both primary outcomes.',
+      'It required an induction taper before maintenance treatment.',
+    ],
+    correctOptionIndex: 1,
+    explanation: 'The trial reported higher week-16 PASI 75 and sPGA 0/1 responses with deucravacitinib than with both placebo and apremilast.',
+    whyItMatters: 'An active-comparator trial gives physicians more useful context than a placebo-only comparison when discussing oral systemic options.',
+    mondayMove: 'Separate selective TYK2 inhibition from broader JAK inhibition when counseling an appropriate patient about oral psoriasis therapy.',
+    limitations: 'The abstract supports comparison with placebo and apremilast, not with biologic therapies. Longer-term and broader-population safety still require separate review.',
+    evidenceMap: [
+      { claim: 'Higher PASI 75 and sPGA 0/1 responses at week 16', sourceQuote: 'At week 16, deucravacitinib produced higher PASI 75 and sPGA 0/1 response rates than both comparators', sourceSection: 'Results', supportType: 'direct' },
+      { claim: 'Efficacy persisted through week 52', sourceQuote: 'with efficacy maintained through week 52', sourceSection: 'Results', supportType: 'direct' },
+    ],
+  },
+}
