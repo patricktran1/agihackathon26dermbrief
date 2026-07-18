@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   Activity,
   BadgeCheck,
@@ -76,12 +76,22 @@ export default function App() {
   const [activeEvents, setActiveEvents] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [persistence, setPersistence] = useState<'idle' | 'saved' | 'local' | 'error'>('idle')
+  const [approvalState, setApprovalState] = useState<'idle' | 'saving' | 'saved' | 'local' | 'error'>('idle')
   const [selectedEvidence, setSelectedEvidence] = useState(0)
+  const [toast, setToast] = useState<string | null>(null)
+  const pmidInputRef = useRef<HTMLInputElement>(null)
+  const toastTimerRef = useRef<number | undefined>(undefined)
 
   const completeAgents = useMemo(
     () => run?.agents.filter((agent) => agent.status === 'complete').length ?? 0,
     [run],
   )
+
+  const showToast = (message: string) => {
+    setToast(message)
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 3600)
+  }
 
   const animateAndPersist = async (nextRun: EvidenceRun, useDemo: boolean) => {
     const stagedRun: EvidenceRun = {
@@ -172,7 +182,9 @@ export default function App() {
     setRun(null)
     setActiveEvents(0)
     setPersistence('idle')
+    setApprovalState('idle')
     setError(null)
+    setToast(null)
     setSelectedEvidence(0)
 
     try {
@@ -215,8 +227,14 @@ export default function App() {
       events: [...run.events, approvalEvent],
     }
 
+    setApprovalState(insforgeConfigured ? 'saving' : 'local')
     setRun(approved)
     setActiveEvents(approved.events.length)
+    showToast('Evidence card approved. Publisher unlocked.')
+
+    window.setTimeout(() => {
+      document.getElementById('publisher-stage')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 180)
 
     if (!insforgeConfigured) return
 
@@ -227,8 +245,11 @@ export default function App() {
       await persistEvidenceRun(persistedRun)
       setRun(persistedRun)
       setPersistence('saved')
+      setApprovalState('saved')
     } catch {
       setPersistence('error')
+      setApprovalState('error')
+      showToast('Approval completed, but InsForge did not confirm the write.')
     }
   }
 
@@ -237,6 +258,22 @@ export default function App() {
     setActiveEvents(0)
     setError(null)
     setPersistence('idle')
+    setApprovalState('idle')
+    setSelectedEvidence(0)
+  }
+
+  const reviewAnother = () => {
+    reset()
+    setPmid('')
+    setToast(null)
+    window.setTimeout(() => {
+      document.getElementById('top')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      pmidInputRef.current?.focus()
+    }, 50)
+  }
+
+  const viewAuditTrail = () => {
+    document.getElementById('audit-trail')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
   const executionLabel = run?.executionSource === 'insforge-live'
@@ -247,8 +284,49 @@ export default function App() {
         ? 'Stage demo'
         : 'Ready'
 
+  const approvalCopy = approvalState === 'saving'
+    ? 'Publisher is unlocked. Saving the physician approval to InsForge…'
+    : approvalState === 'saved'
+      ? 'Publisher is unlocked. Approval is recorded in the InsForge audit trail.'
+      : approvalState === 'error'
+        ? 'Publisher is unlocked. Approval completed, but InsForge did not confirm the write.'
+        : 'Publisher is unlocked. Approval is recorded for this session.'
+
   return (
     <div className="app-shell">
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            top: 88,
+            right: 24,
+            zIndex: 50,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            maxWidth: 390,
+            padding: '13px 15px',
+            border: '1px solid rgba(122,240,176,.34)',
+            borderRadius: 12,
+            color: '#dff9e9',
+            background: 'rgba(12,31,21,.96)',
+            boxShadow: '0 20px 60px rgba(0,0,0,.35)',
+          }}
+        >
+          <BadgeCheck size={18} color="#7af0b0" />
+          <strong style={{ flex: 1, fontSize: 13 }}>{toast}</strong>
+          <button
+            aria-label="Dismiss confirmation"
+            onClick={() => setToast(null)}
+            style={{ display: 'grid', placeItems: 'center', padding: 2, border: 0, color: '#94a69c', background: 'transparent', cursor: 'pointer' }}
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
       <header className="topbar">
         <a className="brand" href="#top" aria-label="DermBrief EvidenceOps home">
           <span className="brand-mark"><HeartPulse size={22} /></span>
@@ -272,7 +350,7 @@ export default function App() {
             <div className="run-control">
               <label>
                 <span>PubMed ID</span>
-                <div><Fingerprint size={18} /><input value={pmid} onChange={(event) => setPmid(event.target.value)} inputMode="numeric" /></div>
+                <div><Fingerprint size={18} /><input ref={pmidInputRef} value={pmid} onChange={(event) => setPmid(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !running && pmid.trim()) void executeRun(false) }} inputMode="numeric" /></div>
               </label>
               <button className="run-button" onClick={() => void executeRun(false)} disabled={running || !pmid.trim()}>
                 {running ? <LoaderCircle className="spin" size={19} /> : <Play size={18} fill="currentColor" />}
@@ -310,7 +388,7 @@ export default function App() {
             {(run?.agents ?? demoRun.agents.map((agent) => ({ ...agent, status: 'idle' as const }))).map((agent, index) => {
               const Icon = agentIcons[agent.id]
               return (
-                <article className={`agent-card status-${agent.status}`} key={agent.id}>
+                <article id={agent.id === 'publisher' ? 'publisher-stage' : undefined} className={`agent-card status-${agent.status}`} key={agent.id}>
                   <div className="agent-index">0{index + 1}</div>
                   <div className="agent-icon"><Icon size={21} /></div>
                   <div className="agent-copy"><h3>{agent.name}</h3><strong>{agent.role}</strong><p>{agent.description}</p></div>
@@ -323,7 +401,7 @@ export default function App() {
         </section>
 
         <section className="workspace-grid">
-          <article className="panel event-panel">
+          <article id="audit-trail" className="panel event-panel">
             <header><div><p className="eyebrow">InsForge audit trail</p><h2>Who did what, and why</h2></div><span><BadgeCheck size={15} /> Durable checkpoints</span></header>
             <div className="event-log">
               {(run?.events.slice(0, activeEvents) ?? []).map((event) => (
@@ -348,11 +426,35 @@ export default function App() {
                 <div key={check.label}><span className={run ? (check.passed ? 'pass' : 'fail') : 'pending'}>{run ? (check.passed ? <Check size={14} /> : <X size={14} />) : <CircleStop size={14} />}</span><div><strong>{check.label}</strong><p>{check.detail}</p></div></div>
               ))}
             </div>
-            <button className="approve-button" onClick={() => void approve()} disabled={!run || running || run.status !== 'awaiting_physician'}>
-              <FileCheck2 size={18} />
-              {run?.status === 'approved' ? 'Physician approval recorded' : 'Approve as Patrick Tran, MD'}
-            </button>
-            <small className="approval-note">Approval is a separate human action and is written to the same InsForge audit trail.</small>
+
+            {run?.status === 'approved' ? (
+              <div
+                role="status"
+                aria-live="polite"
+                style={{ marginTop: 20, padding: 18, border: '1px solid rgba(122,240,176,.3)', borderRadius: 14, background: 'rgba(122,240,176,.055)' }}
+              >
+                <div style={{ display: 'grid', gridTemplateColumns: '42px 1fr', alignItems: 'start', gap: 12 }}>
+                  <span style={{ display: 'grid', width: 42, height: 42, placeItems: 'center', borderRadius: 12, color: '#08140d', background: '#7af0b0' }}><BadgeCheck size={23} /></span>
+                  <div>
+                    <p className="eyebrow" style={{ marginBottom: 7 }}>Evidence card approved</p>
+                    <h3 style={{ margin: 0, font: '700 20px/1.25 Manrope, sans-serif' }}>Publisher is unlocked.</h3>
+                    <p style={{ margin: '7px 0 0', color: '#8fa398', fontSize: 11, lineHeight: 1.55 }}>{approvalCopy}</p>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gap: 8, marginTop: 16 }}>
+                  <button className="approve-button" style={{ marginTop: 0 }} onClick={reviewAnother}><Search size={18} /> Review another PMID</button>
+                  <button className="demo-button" style={{ width: '100%' }} onClick={viewAuditTrail}><Database size={17} /> View completed audit trail</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <button className="approve-button" onClick={() => void approve()} disabled={!run || running || run.status !== 'awaiting_physician'}>
+                  <FileCheck2 size={18} />
+                  Approve as Patrick Tran, MD
+                </button>
+                <small className="approval-note">Approval is a separate human action and is written to the same InsForge audit trail.</small>
+              </>
+            )}
           </article>
         </section>
 
@@ -394,7 +496,7 @@ export default function App() {
           <div><Cloud size={22} /><span><strong>Vercel</strong><small>PubMed processing and public cockpit</small></span></div>
           <div><GitPullRequest size={22} /><span><strong>GitHub</strong><small>{run?.status === 'approved' ? 'Ready for publishing PR' : 'Versioned physician release boundary'}</small></span></div>
           {run?.publishPrUrl && <a href={run.publishPrUrl} target="_blank" rel="noreferrer">Open publishing queue <ExternalLink size={14} /></a>}
-          {run && <button onClick={reset}><RotateCcw size={14} /> Reset demo</button>}
+          {run && <button onClick={reviewAnother}><RotateCcw size={14} /> Review another</button>}
         </section>
       </main>
 
