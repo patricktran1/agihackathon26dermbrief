@@ -1,3 +1,7 @@
+/* Backend persistence remains active, but infrastructure controls are not part of the public physician experience. */
+.evidence-library,
+.integration-strip { display: none; }
+
 .journal-radar { margin: 15px 0 55px; }
 .journal-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 9px; }
 .journal-card { display: grid; min-height: 170px; padding: 15px; border: 1px solid var(--line); border-radius: 14px; color: inherit; background: rgba(255,255,255,.018); cursor: pointer; text-align: left; transition: border-color .2s ease, background .2s ease, transform .2s ease; }
