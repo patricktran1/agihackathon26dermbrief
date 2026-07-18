@@ -1,5 +1,5 @@
 import { createClient } from '@insforge/sdk'
-import type { CoordinationEvent, EvidenceRun, EvidenceRunRequest } from '../types'
+import type { CoordinationEvent, EvidenceRun } from '../types'
 
 const baseUrl = import.meta.env.VITE_INSFORGE_BASE_URL as string | undefined
 const anonKey = import.meta.env.VITE_INSFORGE_ANON_KEY as string | undefined
@@ -10,8 +10,8 @@ const client = insforgeConfigured
   ? createClient({ baseUrl: baseUrl as string, anonKey: anonKey as string })
   : null
 
-// The SDK exposes a PostgREST-shaped query builder. Keep the boundary narrow so
-// the app remains resilient across SDK minor-version type changes.
+// Keep the SDK boundary deliberately small so minor query-builder type changes
+// cannot leak through the rest of the hackathon app.
 const database = client?.database as any | undefined
 
 function firstRow<T>(value: unknown): T | null {
@@ -27,105 +27,80 @@ function eventRow(runId: string, event: CoordinationEvent) {
     event_kind: event.kind,
     phase: event.phase,
     message: event.message,
-    signature_verified: event.signatureVerified,
-    delivery_verified: event.deliveryVerified ?? false,
-    cotal_message_id: event.cotalMessageId ?? null,
+    source_verified: event.sourceVerified,
     created_at: new Date().toISOString(),
   }
 }
 
-export async function createEvidenceRequest(pmid: string): Promise<EvidenceRunRequest> {
-  if (!database) throw new Error('InsForge is not configured')
-  const request: EvidenceRunRequest = {
-    id: `request-${crypto.randomUUID()}`,
-    pmid,
-    status: 'queued',
-    requested_at: new Date().toISOString(),
-  }
-  const result = await database.from('run_requests').insert([request]).select()
-  if (result.error) throw result.error
-  return firstRow<EvidenceRunRequest>(result.data) ?? request
-}
+async function upsertRun(run: EvidenceRun) {
+  if (!database) return false
 
-export async function fetchEvidenceRequest(id: string): Promise<EvidenceRunRequest | null> {
-  if (!database) return null
-  const result = await database.from('run_requests').select('*').eq('id', id).limit(1)
-  if (result.error) throw result.error
-  return firstRow<EvidenceRunRequest>(result.data)
-}
+  const existing = await database.from('evidence_runs').select('id').eq('id', run.id).limit(1)
+  if (existing.error) throw existing.error
 
-export async function fetchEvidenceRun(id: string): Promise<EvidenceRun | null> {
-  if (!database) return null
-  const result = await database.from('evidence_runs').select('*').eq('id', id).limit(1)
-  if (result.error) throw result.error
-  const row = firstRow<Record<string, unknown>>(result.data)
-  if (!row || typeof row.payload !== 'object' || row.payload === null) return null
-  return {
-    ...(row.payload as EvidenceRun),
-    status: String(row.status) as EvidenceRun['status'],
-    executionSource: (row.execution_source as EvidenceRun['executionSource']) ?? (row.payload as EvidenceRun).executionSource,
-    meshAuthMode: (row.mesh_auth_mode as EvidenceRun['meshAuthMode']) ?? (row.payload as EvidenceRun).meshAuthMode,
-  }
-}
-
-export async function fetchAgentEvents(runId: string): Promise<CoordinationEvent[]> {
-  if (!database) return []
-  const result = await database.from('agent_events').select('*').eq('run_id', runId).order('sequence', { ascending: true })
-  if (result.error) throw result.error
-  if (!Array.isArray(result.data)) return []
-  return result.data.map((row: Record<string, unknown>) => ({
-    sequence: Number(row.sequence),
-    timestamp: new Date(String(row.created_at)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-    sender: String(row.sender) as CoordinationEvent['sender'],
-    recipient: String(row.recipient) as CoordinationEvent['recipient'],
-    kind: String(row.event_kind) as CoordinationEvent['kind'],
-    phase: String(row.phase),
-    message: String(row.message),
-    signatureVerified: Boolean(row.signature_verified),
-    deliveryVerified: Boolean(row.delivery_verified),
-    cotalMessageId: typeof row.cotal_message_id === 'string' ? row.cotal_message_id : undefined,
-  }))
-}
-
-export async function fetchRunBundle(runId: string): Promise<EvidenceRun | null> {
-  const [run, events] = await Promise.all([fetchEvidenceRun(runId), fetchAgentEvents(runId)])
-  return run ? { ...run, events } : null
-}
-
-export async function persistEvidenceRun(run: EvidenceRun) {
-  if (!database) return { persisted: false as const, reason: 'InsForge is not configured' }
-
-  const existingResult = await database.from('evidence_runs').select('id').eq('id', run.id).limit(1)
-  if (existingResult.error) throw existingResult.error
-  const runRow = {
+  const row = {
     pmid: run.article.pmid,
     journal: run.article.journal,
     article_title: run.article.title,
     quality_score: run.score,
     status: run.status,
-    execution_source: run.executionSource ?? 'stage-demo',
-    mesh_auth_mode: run.meshAuthMode ?? 'simulated',
+    execution_source: run.executionSource ?? 'insforge-live',
     payload: run,
     created_at: run.startedAt,
     updated_at: new Date().toISOString(),
   }
 
-  const runResult = firstRow(existingResult.data)
-    ? await database.from('evidence_runs').update(runRow).eq('id', run.id)
-    : await database.from('evidence_runs').insert([{ id: run.id, ...runRow }])
-  if (runResult.error) throw runResult.error
+  const result = firstRow(existing.data)
+    ? await database.from('evidence_runs').update(row).eq('id', run.id)
+    : await database.from('evidence_runs').insert([{ id: run.id, ...row }])
 
-  const existingEventsResult = await database.from('agent_events').select('sequence').eq('run_id', run.id)
-  if (existingEventsResult.error) throw existingEventsResult.error
-  const existingSequences = new Set(
-    Array.isArray(existingEventsResult.data)
-      ? existingEventsResult.data.map((row: Record<string, unknown>) => Number(row.sequence))
-      : [],
-  )
-  const missingEvents = run.events.filter((event) => !existingSequences.has(event.sequence))
-  if (missingEvents.length > 0) {
-    const eventResult = await database.from('agent_events').insert(missingEvents.map((event) => eventRow(run.id, event)))
-    if (eventResult.error) throw eventResult.error
+  if (result.error) throw result.error
+  return true
+}
+
+export async function beginEvidenceRun(run: EvidenceRun) {
+  if (!database) return { persisted: false as const }
+  const staged: EvidenceRun = {
+    ...run,
+    status: 'processing',
+    agents: run.agents.map((agent) => ({ ...agent, status: 'idle' })),
+    events: [],
+  }
+  await upsertRun(staged)
+  return { persisted: true as const }
+}
+
+export async function appendAgentEvent(runId: string, event: CoordinationEvent) {
+  if (!database) return { persisted: false as const }
+
+  const existing = await database
+    .from('agent_events')
+    .select('sequence')
+    .eq('run_id', runId)
+    .eq('sequence', event.sequence)
+    .limit(1)
+  if (existing.error) throw existing.error
+
+  if (!firstRow(existing.data)) {
+    const result = await database.from('agent_events').insert([eventRow(runId, event)])
+    if (result.error) throw result.error
+  }
+
+  return { persisted: true as const }
+}
+
+export async function finalizeEvidenceRun(run: EvidenceRun) {
+  if (!database) return { persisted: false as const }
+  await upsertRun(run)
+  return { persisted: true as const }
+}
+
+export async function persistEvidenceRun(run: EvidenceRun) {
+  if (!database) return { persisted: false as const, reason: 'InsForge is not configured' }
+
+  await upsertRun(run)
+  for (const event of run.events) {
+    await appendAgentEvent(run.id, event)
   }
 
   return { persisted: true as const }

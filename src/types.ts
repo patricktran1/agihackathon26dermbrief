@@ -1,8 +1,7 @@
 export type AgentId = 'scout' | 'appraiser' | 'grounder' | 'auditor' | 'publisher'
 export type AgentStatus = 'idle' | 'working' | 'complete' | 'blocked' | 'waiting'
-export type RunStatus = 'queued' | 'processing' | 'awaiting_physician' | 'approved' | 'blocked'
-export type ExecutionSource = 'stage-demo' | 'vercel-direct' | 'cotal-live'
-export type MeshAuthMode = 'simulated' | 'open-loopback' | 'authenticated'
+export type RunStatus = 'processing' | 'awaiting_physician' | 'approved' | 'blocked'
+export type ExecutionSource = 'stage-demo' | 'vercel-direct' | 'insforge-live'
 
 export type AgentState = {
   id: AgentId
@@ -16,12 +15,11 @@ export type CoordinationEvent = {
   sequence: number
   timestamp: string
   sender: AgentId | 'physician'
-  recipient: AgentId | 'physician' | '#evidenceops'
-  kind: 'multicast' | 'unicast' | 'anycast' | 'approval'
+  recipient: AgentId | 'physician' | 'workflow'
+  kind: 'checkpoint' | 'handoff' | 'approval'
   message: string
-  signatureVerified: boolean
-  deliveryVerified?: boolean
-  cotalMessageId?: string
+  sourceVerified: boolean
+  persisted?: boolean
   phase: string
 }
 
@@ -61,8 +59,6 @@ export type EvidenceRun = {
   completedAt: string
   status: RunStatus
   executionSource?: ExecutionSource
-  meshAuthMode?: MeshAuthMode
-  requestId?: string
   score: number
   scoreReasons: string[]
   safetyChecks: { label: string; passed: boolean; detail: string }[]
@@ -71,16 +67,4 @@ export type EvidenceRun = {
   article: ArticleRecord
   card: LearningCard
   publishPrUrl?: string
-}
-
-export type EvidenceRunRequest = {
-  id: string
-  pmid: string
-  status: 'queued' | 'processing' | 'complete' | 'error'
-  requested_at: string
-  claimed_at?: string | null
-  completed_at?: string | null
-  result_run_id?: string | null
-  error?: string | null
-  worker_id?: string | null
 }
