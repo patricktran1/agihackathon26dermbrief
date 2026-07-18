@@ -31,16 +31,30 @@ The most important metric on the screen is **Autonomous releases: 0**.
 
 ### Cotal
 
-The repo includes an actual Cotal mesh demo using `@cotal-ai/core`.
+Official documentation: https://docs.cotal.ai
+
+The repo includes an actual Cotal mesh demo using `@cotal-ai/core`. The demo endpoints are intentionally run on Cotal's documented open, loopback-only mesh so no credentials are required during judging.
+
+Run these in separate terminals:
 
 ```bash
+# One-time machine setup
 npx cotal-ai setup
-cotal up --open --detach
+
+# Terminal 1: start the local open mesh
+cotal up --open
+
+# Terminal 2: show the live mesh to judges
+cotal web
+# Or use: cotal console
+
+# Terminal 3: send the five-agent EvidenceOps sequence
 npm run cotal:demo
-cotal console
 ```
 
-The script starts five named Cotal endpoints and demonstrates multicast, unicast, and anycast handoffs in one replayable space.
+The script starts five named Cotal endpoints and demonstrates multicast, unicast, and anycast handoffs in one shared space. It registers asynchronous SDK error listeners before starting each endpoint, as required by the current Cotal endpoint contract.
+
+For an authenticated durable mesh outside the hackathon demo, use Cotal's default `cotal up --detach` workflow and provision agent credentials rather than connecting anonymous raw endpoints.
 
 ### InsForge
 
@@ -71,6 +85,8 @@ The stage-demo path is fully deterministic. The real-PubMed path is implemented 
 ## Deploy
 
 Import the repository into Vercel. No required secret is needed for the deterministic pipeline. `NCBI_API_KEY` is optional for higher PubMed request limits.
+
+Vercel hosts the web cockpit and request-scoped PubMed function. Run the long-lived Cotal/NATS mesh locally or on persistent infrastructure, not inside a Vercel Function.
 
 ## Safety architecture
 
