@@ -1,14 +1,16 @@
 {
   "name": "agihackathon26dermbrief",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "check": "tsc -b --pretty false",
+    "check": "tsc -b --pretty false && node --check scripts/cotal-insforge-worker.mjs",
     "preview": "vite preview",
-    "cotal:demo": "node scripts/cotal-demo.mjs"
+    "cotal:demo": "node scripts/cotal-demo.mjs",
+    "worker": "node --env-file-if-exists=.env.local scripts/cotal-insforge-worker.mjs",
+    "worker:once": "WORKER_ONCE=1 node --env-file-if-exists=.env.local scripts/cotal-insforge-worker.mjs"
   },
   "dependencies": {
     "@cotal-ai/core": "0.12.0",

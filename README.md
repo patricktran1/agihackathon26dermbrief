@@ -1,14 +1,26 @@
 # DermBrief EvidenceOps
 
-**An autonomous, auditable multi-agent workflow that converts new dermatology research into physician-reviewed clinical learning.**
+**A live, auditable multi-agent workflow that converts dermatology research into physician-reviewed clinical learning.**
 
 Built for the **AGI Summit 2026 Hackathon** in San Francisco.
 
-## The problem
+## What changed in the live engine
 
-Clinical AI often collapses discovery, interpretation, writing, safety review, and publication into one opaque model call. That is the wrong autonomy boundary for medical education.
+The sponsor integrations now form one execution path instead of two adjacent demos:
 
-DermBrief EvidenceOps separates the work across accountable agents and preserves a hard physician release gate:
+```text
+Vercel browser
+  → creates an InsForge run request
+  → local bridge worker claims the request
+  → five real Cotal endpoints emit the handoffs
+  → every Cotal envelope is written to InsForge
+  → browser follows the persisted run and event trail
+  → physician approval updates the same durable record
+```
+
+The direct Vercel path and deterministic stage demo remain available as fallbacks.
+
+## Five accountable agents
 
 1. **Scout** retrieves a PubMed record and verifies the journal.
 2. **Appraiser** scores study design, bias signals, and clinical relevance.
@@ -16,77 +28,103 @@ DermBrief EvidenceOps separates the work across accountable agents and preserves
 4. **Safety Auditor** blocks unsupported wording and ambiguous answers.
 5. **Publisher** remains unavailable until a physician approves.
 
-## Hackathon demo
-
-1. Enter a PMID or click **Use stage demo**.
-2. Watch five agents coordinate through a Cotal-shaped shared event stream.
-3. Inspect the deterministic evidence score and safety gate.
-4. Compare each learner-facing claim with its verbatim source excerpt.
-5. Approve as the physician.
-6. Show the Publisher unlocking for a versioned GitHub release.
-
 The most important metric on the screen is **Autonomous releases: 0**.
 
-## Sponsor integrations
+## Live Cotal + InsForge setup
 
-### Cotal
+### 1. Create the InsForge backend
 
-Official documentation: https://docs.cotal.ai
+Apply:
 
-The repo includes an actual Cotal mesh demo using `@cotal-ai/core`. The demo endpoints are intentionally run on Cotal's documented open, loopback-only mesh so no credentials are required during judging.
-
-Run these in separate terminals:
-
-```bash
-# One-time machine setup
-npx cotal-ai setup
-
-# Terminal 1: start the local open mesh
-cotal up --open
-
-# Terminal 2: show the live mesh to judges
-cotal web
-# Or use: cotal console
-
-# Terminal 3: send the five-agent EvidenceOps sequence
-npm run cotal:demo
+```text
+insforge/migrations/001_evidenceops.sql
 ```
 
-The script starts five named Cotal endpoints and demonstrates multicast, unicast, and anycast handoffs in one shared space. It registers asynchronous SDK error listeners before starting each endpoint, as required by the current Cotal endpoint contract.
+For a project that already used the earlier schema, apply:
 
-For an authenticated durable mesh outside the hackathon demo, use Cotal's default `cotal up --detach` workflow and provision agent credentials rather than connecting anonymous raw endpoints.
-
-### InsForge
-
-The web app uses the official `@insforge/sdk`. When the two browser-safe environment values are present, complete runs and agent events are persisted to InsForge Postgres.
-
-```bash
-cp .env.example .env.local
+```text
+insforge/migrations/002_live_cotal_engine.sql
 ```
 
-Apply `insforge/migrations/001_evidenceops.sql`, then set:
+The backend contains:
+
+- `run_requests`: durable queue between the Vercel UI and bridge worker
+- `evidence_runs`: full evidence payload and workflow state
+- `agent_events`: append-only Cotal handoff receipts
+
+The included row-level security policies are intentionally permissive for the hackathon. Tighten them before production.
+
+### 2. Configure Vercel
+
+Add these browser-safe values and redeploy:
 
 ```text
 VITE_INSFORGE_BASE_URL=https://your-project.insforge.app
 VITE_INSFORGE_ANON_KEY=your-anon-key
 ```
 
-The app still works without InsForge and labels persistence as local/demo mode.
+With those values present, **Run EvidenceOps** creates an InsForge queue item and waits for the live bridge. Without them, the app uses the direct Vercel fallback.
 
-## Run locally
+### 3. Start Cotal on the demo laptop
+
+Follow the official Cotal setup at `docs.cotal.ai`:
+
+```bash
+npx cotal-ai setup
+cotal up --open
+```
+
+Keep either observer open:
+
+```bash
+cotal web
+# or
+cotal console
+```
+
+The open mesh is loopback-only and frictionless for a stage demo. For authenticated identities, configure a Cotal token or user/password pair through the worker environment.
+
+### 4. Start the bridge worker
+
+Create `.env.local` from `.env.example`, then provide:
+
+```text
+INSFORGE_BASE_URL
+INSFORGE_ANON_KEY
+DERMBRIEF_API_URL
+COTAL_SERVER
+COTAL_SPACE
+```
+
+Run:
 
 ```bash
 npm install
-npm run dev
+npm run worker
 ```
 
-The stage-demo path is fully deterministic. The real-PubMed path is implemented as the Vercel Function `api/process-evidence.js` and is available after deployment.
+The worker:
 
-## Deploy
+- claims the oldest queued PMID
+- calls the deployed PubMed evidence endpoint
+- emits multicast, unicast, and anycast messages through real `CotalEndpoint` instances
+- stores each Cotal message ID in InsForge
+- updates the run after every handoff
+- stops at the physician release boundary
 
-Import the repository into Vercel. No required secret is needed for the deterministic pipeline. `NCBI_API_KEY` is optional for higher PubMed request limits.
+Use `npm run worker:once` to process one queued request and exit.
 
-Vercel hosts the web cockpit and request-scoped PubMed function. Run the long-lived Cotal/NATS mesh locally or on persistent infrastructure, not inside a Vercel Function.
+## Demo sequence
+
+1. Open the deployed Vercel site.
+2. Keep `cotal web` visible beside it.
+3. Enter PMID `35820547` and click **Run EvidenceOps**.
+4. Watch the request move through InsForge while Cotal messages appear in the mesh.
+5. Inspect the Cotal message receipts and claim-to-source mappings.
+6. Approve as Patrick Tran, MD.
+7. Show that the Publisher only unlocks after the human action.
+
+Use **Use stage demo** as the venue-Wi-Fi fallback.
 
 ## Safety architecture
 
@@ -96,18 +134,20 @@ Vercel hosts the web cockpit and request-scoped PubMed function. Run the long-li
 - The system never claims CME accreditation.
 - No patient data is accepted or required.
 - Agent completion never equals physician approval.
-- Publication is represented as a separate human-authorized capability.
+- Publication remains a separate human-authorized capability.
 
 ## Repository map
 
 ```text
-api/process-evidence.js                  Real PubMed ingestion and deterministic agents
-src/App.tsx                              Hackathon cockpit and physician approval gate
-src/lib/insforge.ts                      Optional durable InsForge persistence
-scripts/cotal-demo.mjs                   Actual five-endpoint Cotal coordination demo
-insforge/migrations/001_evidenceops.sql  InsForge database schema
+api/process-evidence.js                       PubMed ingestion and deterministic appraisal
+src/App.tsx                                   Live queue UI and physician approval gate
+src/lib/insforge.ts                           Queue, polling, persistence, and approval updates
+scripts/cotal-insforge-worker.mjs             Real Cotal-to-InsForge bridge
+scripts/cotal-demo.mjs                        Standalone Cotal protocol demonstration
+insforge/migrations/001_evidenceops.sql       Fresh backend schema
+insforge/migrations/002_live_cotal_engine.sql Existing-project upgrade
 ```
 
 ## Pitch
 
-> Clinical AI should not autonomously publish medical education. DermBrief EvidenceOps uses a coordinated team of agents to discover, appraise, ground, and audit new dermatology evidence, while preserving a hard physician approval boundary. Every claim traces to a source excerpt, every agent action is replayable, and every release remains attributable to a physician.
+> Clinical AI should not autonomously publish medical education. Cotal coordinates accountable agents, InsForge preserves their audit trail, and DermBrief keeps the final release capability with a physician.

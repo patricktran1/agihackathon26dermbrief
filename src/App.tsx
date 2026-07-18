@@ -26,7 +26,13 @@ import {
   X,
 } from 'lucide-react'
 import { demoRun } from './demo'
-import { insforgeConfigured, persistEvidenceRun } from './lib/insforge'
+import {
+  createEvidenceRequest,
+  fetchEvidenceRequest,
+  fetchRunBundle,
+  insforgeConfigured,
+  persistEvidenceRun,
+} from './lib/insforge'
 import type { AgentId, AgentState, EvidenceRun } from './types'
 
 const agentIcons: Record<AgentId, typeof Search> = {
@@ -45,12 +51,24 @@ const statusLabels: Record<AgentState['status'], string> = {
   waiting: 'Awaiting physician',
 }
 
-function delay(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
-}
+const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
 
 function isEvidenceRun(value: unknown): value is EvidenceRun {
   return typeof value === 'object' && value !== null && 'article' in value && 'events' in value && 'card' in value
+}
+
+function normalizeLocalRun(run: EvidenceRun, source: EvidenceRun['executionSource']): EvidenceRun {
+  return {
+    ...run,
+    executionSource: source,
+    meshAuthMode: 'simulated',
+    events: run.events.map((event) => ({
+      ...event,
+      signatureVerified: false,
+      deliveryVerified: false,
+      cotalMessageId: undefined,
+    })),
+  }
 }
 
 export default function App() {
@@ -61,11 +79,88 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [persistence, setPersistence] = useState<'idle' | 'saved' | 'local' | 'error'>('idle')
   const [selectedEvidence, setSelectedEvidence] = useState(0)
+  const [requestId, setRequestId] = useState<string | null>(null)
 
   const completeAgents = useMemo(
     () => run?.agents.filter((agent) => agent.status === 'complete').length ?? 0,
     [run],
   )
+
+  const animateLocalRun = async (nextRun: EvidenceRun, useDemo: boolean) => {
+    const stagedRun: EvidenceRun = {
+      ...nextRun,
+      agents: nextRun.agents.map((agent) => ({ ...agent, status: 'idle' })),
+    }
+    setRun(stagedRun)
+
+    for (let index = 0; index < nextRun.events.length; index += 1) {
+      await delay(useDemo ? 430 : 310)
+      const event = nextRun.events[index]
+      setActiveEvents(index + 1)
+      setRun((current) => {
+        if (!current) return current
+        const agents = current.agents.map((agent) => {
+          if (agent.id === event.sender) return { ...agent, status: 'complete' as const }
+          if (agent.id === event.recipient) return { ...agent, status: 'working' as const }
+          return agent
+        })
+        return { ...current, agents }
+      })
+    }
+
+    setRun(nextRun)
+    try {
+      const result = await persistEvidenceRun(nextRun)
+      setPersistence(result.persisted ? 'saved' : 'local')
+    } catch {
+      setPersistence('error')
+    }
+  }
+
+  const runDirect = async () => {
+    const response = await fetch('/api/process-evidence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pmid: pmid.replace(/\D/g, '') }),
+    })
+    const payload: unknown = await response.json()
+    if (!response.ok || !isEvidenceRun(payload)) {
+      const message = typeof payload === 'object' && payload && 'error' in payload
+        ? String(payload.error)
+        : 'Evidence processing failed'
+      throw new Error(message)
+    }
+    await animateLocalRun(normalizeLocalRun(payload, 'vercel-direct'), false)
+  }
+
+  const runThroughCotal = async () => {
+    const request = await createEvidenceRequest(pmid.replace(/\D/g, ''))
+    setRequestId(request.id)
+    const deadline = Date.now() + 120_000
+    let currentRunId: string | null = null
+
+    while (Date.now() < deadline) {
+      const currentRequest = await fetchEvidenceRequest(request.id)
+      if (!currentRequest) throw new Error('InsForge could not find the queued evidence request.')
+      if (currentRequest.status === 'error') throw new Error(currentRequest.error || 'The Cotal worker rejected this request.')
+      if (currentRequest.result_run_id) currentRunId = currentRequest.result_run_id
+
+      if (currentRunId) {
+        const liveRun = await fetchRunBundle(currentRunId)
+        if (liveRun) {
+          setRun(liveRun)
+          setActiveEvents(liveRun.events.length)
+          if (currentRequest.status === 'complete') {
+            setPersistence('saved')
+            return
+          }
+        }
+      }
+      await delay(550)
+    }
+
+    throw new Error('The request is queued in InsForge, but no Cotal bridge worker claimed it. Start `npm run worker` on the demo laptop.')
+  }
 
   const executeRun = async (useDemo = false) => {
     setRunning(true)
@@ -73,52 +168,16 @@ export default function App() {
     setActiveEvents(0)
     setPersistence('idle')
     setError(null)
+    setRequestId(null)
+    setSelectedEvidence(0)
 
     try {
-      let nextRun = demoRun
-      if (!useDemo) {
-        const response = await fetch('/api/process-evidence', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pmid: pmid.replace(/\D/g, '') }),
-        })
-        const payload: unknown = await response.json()
-        if (!response.ok || !isEvidenceRun(payload)) {
-          const message = typeof payload === 'object' && payload && 'error' in payload
-            ? String(payload.error)
-            : 'Evidence processing failed'
-          throw new Error(message)
-        }
-        nextRun = payload
-      }
-
-      const stagedRun: EvidenceRun = {
-        ...nextRun,
-        agents: nextRun.agents.map((agent) => ({ ...agent, status: 'idle' })),
-      }
-      setRun(stagedRun)
-
-      for (let index = 0; index < nextRun.events.length; index += 1) {
-        await delay(useDemo ? 430 : 310)
-        const event = nextRun.events[index]
-        setActiveEvents(index + 1)
-        setRun((current) => {
-          if (!current) return current
-          const agents = current.agents.map((agent) => {
-            if (agent.id === event.sender) return { ...agent, status: 'complete' as const }
-            if (agent.id === event.recipient) return { ...agent, status: 'working' as const }
-            return agent
-          })
-          return { ...current, agents }
-        })
-      }
-
-      setRun(nextRun)
-      try {
-        const result = await persistEvidenceRun(nextRun)
-        setPersistence(result.persisted ? 'saved' : 'local')
-      } catch {
-        setPersistence('error')
+      if (useDemo) {
+        await animateLocalRun(normalizeLocalRun(demoRun, 'stage-demo'), true)
+      } else if (insforgeConfigured) {
+        await runThroughCotal()
+      } else {
+        await runDirect()
       }
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : 'Unable to process evidence')
@@ -145,13 +204,16 @@ export default function App() {
           kind: 'approval',
           message: 'Patrick Tran, MD approved the evidence card for a versioned publishing PR.',
           signatureVerified: true,
+          deliveryVerified: true,
           phase: 'Human approval',
         },
       ],
     }
     setRun(approved)
     setActiveEvents(approved.events.length)
-    void persistEvidenceRun(approved).catch(() => undefined)
+    void persistEvidenceRun(approved)
+      .then((result) => setPersistence(result.persisted ? 'saved' : 'local'))
+      .catch(() => setPersistence('error'))
   }
 
   const reset = () => {
@@ -159,7 +221,11 @@ export default function App() {
     setActiveEvents(0)
     setError(null)
     setPersistence('idle')
+    setRequestId(null)
   }
+
+  const cotalLive = run?.executionSource === 'cotal-live'
+  const executionLabel = cotalLive ? 'Cotal live' : run?.executionSource === 'vercel-direct' ? 'Direct fallback' : run?.executionSource === 'stage-demo' ? 'Stage demo' : 'Ready'
 
   return (
     <div className="app-shell">
@@ -169,7 +235,7 @@ export default function App() {
           <span><strong>DERMBRIEF</strong><small>EvidenceOps</small></span>
         </a>
         <div className="topbar-badges">
-          <span><Network size={14} /> Cotal mesh</span>
+          <span className={cotalLive ? 'connected' : ''}><Network size={14} /> Cotal {cotalLive ? 'live' : 'ready'}</span>
           <span className={insforgeConfigured ? 'connected' : ''}><Database size={14} /> InsForge {insforgeConfigured ? 'connected' : 'ready'}</span>
           <span><LockKeyhole size={14} /> Human approval</span>
         </div>
@@ -191,7 +257,7 @@ export default function App() {
               </label>
               <button className="run-button" onClick={() => void executeRun(false)} disabled={running || !pmid.trim()}>
                 {running ? <LoaderCircle className="spin" size={19} /> : <Play size={18} fill="currentColor" />}
-                {running ? 'Agents working' : 'Run EvidenceOps'}
+                {running ? (insforgeConfigured ? 'Cotal working' : 'Agents working') : 'Run EvidenceOps'}
               </button>
               <button className="demo-button" onClick={() => void executeRun(true)} disabled={running}>Use stage demo</button>
             </div>
@@ -210,9 +276,10 @@ export default function App() {
             </div>
             <dl>
               <div><dt>Verified agents</dt><dd>{completeAgents}/5</dd></div>
-              <div><dt>Grounded claims</dt><dd>{run?.card.evidenceMap.length ?? 0}</dd></div>
+              <div><dt>Execution</dt><dd>{executionLabel}</dd></div>
               <div><dt>Autonomous releases</dt><dd>0</dd></div>
             </dl>
+            {requestId && <small>InsForge request {requestId.slice(-8)}</small>}
           </div>
         </section>
 
@@ -239,14 +306,17 @@ export default function App() {
 
         <section className="workspace-grid">
           <article className="panel event-panel">
-            <header><div><p className="eyebrow">Replayable coordination log</p><h2>Who did what, and why</h2></div><span><BadgeCheck size={15} /> Signed identities</span></header>
+            <header><div><p className="eyebrow">Replayable coordination log</p><h2>Who did what, and why</h2></div><span><BadgeCheck size={15} /> Cotal receipts</span></header>
             <div className="event-log">
               {(run?.events.slice(0, activeEvents) ?? []).map((event) => (
                 <div className="event-row" key={event.sequence}>
                   <span className="event-seq">{String(event.sequence).padStart(3, '0')}</span>
                   <span className="event-time">{event.timestamp}</span>
                   <div className="event-message"><strong>{event.sender} → {event.recipient}</strong><p>{event.message}</p><small>{event.kind} · {event.phase}</small></div>
-                  <span className="signature"><BadgeCheck size={14} /> verified</span>
+                  <span className="signature">
+                    {event.signatureVerified ? <BadgeCheck size={14} /> : event.deliveryVerified ? <Network size={14} /> : <CircleStop size={14} />}
+                    {event.signatureVerified ? 'authenticated' : event.deliveryVerified ? 'mesh receipt' : 'deterministic'}
+                  </span>
                 </div>
               ))}
               {!run && <div className="empty-log"><Network size={35} /><strong>The mesh is quiet</strong><p>Run a PMID to stream agent handoffs into the shared audit log.</p></div>}
@@ -302,8 +372,8 @@ export default function App() {
         )}
 
         <section className="integration-strip">
-          <div><Network size={22} /><span><strong>Cotal</strong><small>Identity, handoffs, presence, replayable log</small></span></div>
-          <div><Database size={22} /><span><strong>InsForge</strong><small>{persistence === 'saved' ? 'Run persisted' : persistence === 'error' ? 'Persistence error' : insforgeConfigured ? 'Connected and ready' : 'Optional durable run history'}</small></span></div>
+          <div><Network size={22} /><span><strong>Cotal</strong><small>{cotalLive ? `Live ${run?.meshAuthMode === 'authenticated' ? 'authenticated' : 'loopback'} handoffs` : 'Direct and stage fallbacks ready'}</small></span></div>
+          <div><Database size={22} /><span><strong>InsForge</strong><small>{persistence === 'saved' ? 'Queue and audit trail persisted' : persistence === 'error' ? 'Persistence error' : insforgeConfigured ? 'Connected queue and audit bus' : 'Add credentials for live coordination'}</small></span></div>
           <div><GitPullRequest size={22} /><span><strong>GitHub</strong><small>{run?.status === 'approved' ? 'Ready for publishing PR' : 'Versioned physician release boundary'}</small></span></div>
           {run?.publishPrUrl && <a href={run.publishPrUrl} target="_blank" rel="noreferrer">Open publishing queue <ExternalLink size={14} /></a>}
           {run && <button onClick={reset}><RotateCcw size={14} /> Reset demo</button>}
