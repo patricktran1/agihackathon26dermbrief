@@ -7,6 +7,7 @@ import {
   Check,
   ChevronRight,
   CircleStop,
+  Cloud,
   Database,
   ExternalLink,
   FileCheck2,
@@ -15,7 +16,6 @@ import {
   HeartPulse,
   LoaderCircle,
   LockKeyhole,
-  Network,
   Play,
   RotateCcw,
   Search,
@@ -27,13 +27,13 @@ import {
 } from 'lucide-react'
 import { demoRun } from './demo'
 import {
-  createEvidenceRequest,
-  fetchEvidenceRequest,
-  fetchRunBundle,
+  appendAgentEvent,
+  beginEvidenceRun,
+  finalizeEvidenceRun,
   insforgeConfigured,
   persistEvidenceRun,
 } from './lib/insforge'
-import type { AgentId, AgentState, EvidenceRun } from './types'
+import type { AgentId, AgentState, CoordinationEvent, EvidenceRun } from './types'
 
 const agentIcons: Record<AgentId, typeof Search> = {
   scout: Search,
@@ -57,16 +57,14 @@ function isEvidenceRun(value: unknown): value is EvidenceRun {
   return typeof value === 'object' && value !== null && 'article' in value && 'events' in value && 'card' in value
 }
 
-function normalizeLocalRun(run: EvidenceRun, source: EvidenceRun['executionSource']): EvidenceRun {
+function normalizeRun(run: EvidenceRun, source: EvidenceRun['executionSource']): EvidenceRun {
   return {
     ...run,
     executionSource: source,
-    meshAuthMode: 'simulated',
     events: run.events.map((event) => ({
       ...event,
-      signatureVerified: false,
-      deliveryVerified: false,
-      cotalMessageId: undefined,
+      sourceVerified: event.sourceVerified ?? true,
+      persisted: false,
     })),
   }
 }
@@ -79,23 +77,49 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [persistence, setPersistence] = useState<'idle' | 'saved' | 'local' | 'error'>('idle')
   const [selectedEvidence, setSelectedEvidence] = useState(0)
-  const [requestId, setRequestId] = useState<string | null>(null)
 
   const completeAgents = useMemo(
     () => run?.agents.filter((agent) => agent.status === 'complete').length ?? 0,
     [run],
   )
 
-  const animateLocalRun = async (nextRun: EvidenceRun, useDemo: boolean) => {
+  const animateAndPersist = async (nextRun: EvidenceRun, useDemo: boolean) => {
     const stagedRun: EvidenceRun = {
       ...nextRun,
+      status: 'processing',
       agents: nextRun.agents.map((agent) => ({ ...agent, status: 'idle' })),
+      events: nextRun.events.map((event) => ({ ...event, persisted: false })),
     }
+    const displayedEvents = stagedRun.events.map((event) => ({ ...event }))
+    let databaseHealthy = insforgeConfigured
+
     setRun(stagedRun)
 
+    if (insforgeConfigured) {
+      try {
+        await beginEvidenceRun(stagedRun)
+      } catch {
+        databaseHealthy = false
+        setPersistence('error')
+      }
+    }
+
     for (let index = 0; index < nextRun.events.length; index += 1) {
-      await delay(useDemo ? 430 : 310)
+      await delay(useDemo ? 420 : 300)
       const event = nextRun.events[index]
+      let persisted = false
+
+      if (databaseHealthy) {
+        try {
+          const result = await appendAgentEvent(nextRun.id, event)
+          persisted = result.persisted
+        } catch {
+          databaseHealthy = false
+          setPersistence('error')
+        }
+      }
+
+      displayedEvents[index] = { ...event, persisted }
       setActiveEvents(index + 1)
       setRun((current) => {
         if (!current) return current
@@ -104,20 +128,30 @@ export default function App() {
           if (agent.id === event.recipient) return { ...agent, status: 'working' as const }
           return agent
         })
-        return { ...current, agents }
+        return { ...current, agents, events: displayedEvents.map((item) => ({ ...item })) }
       })
     }
 
-    setRun(nextRun)
-    try {
-      const result = await persistEvidenceRun(nextRun)
-      setPersistence(result.persisted ? 'saved' : 'local')
-    } catch {
-      setPersistence('error')
+    const completedRun: EvidenceRun = {
+      ...nextRun,
+      events: displayedEvents,
     }
+
+    if (databaseHealthy) {
+      try {
+        await finalizeEvidenceRun(completedRun)
+        setPersistence('saved')
+      } catch {
+        setPersistence('error')
+      }
+    } else if (!insforgeConfigured) {
+      setPersistence('local')
+    }
+
+    setRun(completedRun)
   }
 
-  const runDirect = async () => {
+  const fetchProcessedRun = async () => {
     const response = await fetch('/api/process-evidence', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -130,36 +164,7 @@ export default function App() {
         : 'Evidence processing failed'
       throw new Error(message)
     }
-    await animateLocalRun(normalizeLocalRun(payload, 'vercel-direct'), false)
-  }
-
-  const runThroughCotal = async () => {
-    const request = await createEvidenceRequest(pmid.replace(/\D/g, ''))
-    setRequestId(request.id)
-    const deadline = Date.now() + 120_000
-    let currentRunId: string | null = null
-
-    while (Date.now() < deadline) {
-      const currentRequest = await fetchEvidenceRequest(request.id)
-      if (!currentRequest) throw new Error('InsForge could not find the queued evidence request.')
-      if (currentRequest.status === 'error') throw new Error(currentRequest.error || 'The Cotal worker rejected this request.')
-      if (currentRequest.result_run_id) currentRunId = currentRequest.result_run_id
-
-      if (currentRunId) {
-        const liveRun = await fetchRunBundle(currentRunId)
-        if (liveRun) {
-          setRun(liveRun)
-          setActiveEvents(liveRun.events.length)
-          if (currentRequest.status === 'complete') {
-            setPersistence('saved')
-            return
-          }
-        }
-      }
-      await delay(550)
-    }
-
-    throw new Error('The request is queued in InsForge, but no Cotal bridge worker claimed it. Start `npm run worker` on the demo laptop.')
+    return payload
   }
 
   const executeRun = async (useDemo = false) => {
@@ -168,16 +173,17 @@ export default function App() {
     setActiveEvents(0)
     setPersistence('idle')
     setError(null)
-    setRequestId(null)
     setSelectedEvidence(0)
 
     try {
       if (useDemo) {
-        await animateLocalRun(normalizeLocalRun(demoRun, 'stage-demo'), true)
-      } else if (insforgeConfigured) {
-        await runThroughCotal()
+        await animateAndPersist(normalizeRun(demoRun, 'stage-demo'), true)
       } else {
-        await runDirect()
+        const processed = await fetchProcessedRun()
+        await animateAndPersist(
+          normalizeRun(processed, insforgeConfigured ? 'insforge-live' : 'vercel-direct'),
+          false,
+        )
       }
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : 'Unable to process evidence')
@@ -186,34 +192,44 @@ export default function App() {
     }
   }
 
-  const approve = () => {
+  const approve = async () => {
     if (!run || run.status !== 'awaiting_physician') return
-    const sequence = run.events.length + 1
+
+    const approvalEvent: CoordinationEvent = {
+      sequence: run.events.length + 1,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      sender: 'physician',
+      recipient: 'publisher',
+      kind: 'approval',
+      message: 'Patrick Tran, MD approved the evidence card for a versioned publishing PR.',
+      sourceVerified: true,
+      persisted: false,
+      phase: 'Human approval',
+    }
+
     const approved: EvidenceRun = {
       ...run,
       status: 'approved',
       publishPrUrl: 'https://github.com/patricktran1/agihackathon26dermbrief/pulls',
       agents: run.agents.map((agent) => agent.id === 'publisher' ? { ...agent, status: 'complete' } : agent),
-      events: [
-        ...run.events,
-        {
-          sequence,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          sender: 'physician',
-          recipient: 'publisher',
-          kind: 'approval',
-          message: 'Patrick Tran, MD approved the evidence card for a versioned publishing PR.',
-          signatureVerified: true,
-          deliveryVerified: true,
-          phase: 'Human approval',
-        },
-      ],
+      events: [...run.events, approvalEvent],
     }
+
     setRun(approved)
     setActiveEvents(approved.events.length)
-    void persistEvidenceRun(approved)
-      .then((result) => setPersistence(result.persisted ? 'saved' : 'local'))
-      .catch(() => setPersistence('error'))
+
+    if (!insforgeConfigured) return
+
+    try {
+      await appendAgentEvent(approved.id, approvalEvent)
+      const persistedApproval = { ...approvalEvent, persisted: true }
+      const persistedRun = { ...approved, events: [...run.events, persistedApproval] }
+      await persistEvidenceRun(persistedRun)
+      setRun(persistedRun)
+      setPersistence('saved')
+    } catch {
+      setPersistence('error')
+    }
   }
 
   const reset = () => {
@@ -221,11 +237,15 @@ export default function App() {
     setActiveEvents(0)
     setError(null)
     setPersistence('idle')
-    setRequestId(null)
   }
 
-  const cotalLive = run?.executionSource === 'cotal-live'
-  const executionLabel = cotalLive ? 'Cotal live' : run?.executionSource === 'vercel-direct' ? 'Direct fallback' : run?.executionSource === 'stage-demo' ? 'Stage demo' : 'Ready'
+  const executionLabel = run?.executionSource === 'insforge-live'
+    ? 'InsForge live'
+    : run?.executionSource === 'vercel-direct'
+      ? 'Local fallback'
+      : run?.executionSource === 'stage-demo'
+        ? 'Stage demo'
+        : 'Ready'
 
   return (
     <div className="app-shell">
@@ -235,7 +255,6 @@ export default function App() {
           <span><strong>DERMBRIEF</strong><small>EvidenceOps</small></span>
         </a>
         <div className="topbar-badges">
-          <span className={cotalLive ? 'connected' : ''}><Network size={14} /> Cotal {cotalLive ? 'live' : 'ready'}</span>
           <span className={insforgeConfigured ? 'connected' : ''}><Database size={14} /> InsForge {insforgeConfigured ? 'connected' : 'ready'}</span>
           <span><LockKeyhole size={14} /> Human approval</span>
         </div>
@@ -247,8 +266,8 @@ export default function App() {
             <p className="eyebrow"><Sparkles size={15} /> AGI Summit 2026 Hackathon build</p>
             <h1>From new research to an<br /><em>auditable clinical decision.</em></h1>
             <p className="hero-description">
-              Five specialized agents discover, appraise, ground, and safety-check dermatology evidence.
-              The final release key stays with the physician.
+              Five accountable stages discover, appraise, ground, and safety-check dermatology evidence.
+              InsForge records every checkpoint, while the final release key stays with the physician.
             </p>
             <div className="run-control">
               <label>
@@ -257,7 +276,7 @@ export default function App() {
               </label>
               <button className="run-button" onClick={() => void executeRun(false)} disabled={running || !pmid.trim()}>
                 {running ? <LoaderCircle className="spin" size={19} /> : <Play size={18} fill="currentColor" />}
-                {running ? (insforgeConfigured ? 'Cotal working' : 'Agents working') : 'Run EvidenceOps'}
+                {running ? (insforgeConfigured ? 'Recording workflow' : 'Processing evidence') : 'Run EvidenceOps'}
               </button>
               <button className="demo-button" onClick={() => void executeRun(true)} disabled={running}>Use stage demo</button>
             </div>
@@ -275,18 +294,17 @@ export default function App() {
               </div>
             </div>
             <dl>
-              <div><dt>Verified agents</dt><dd>{completeAgents}/5</dd></div>
+              <div><dt>Completed stages</dt><dd>{completeAgents}/5</dd></div>
               <div><dt>Execution</dt><dd>{executionLabel}</dd></div>
               <div><dt>Autonomous releases</dt><dd>0</dd></div>
             </dl>
-            {requestId && <small>InsForge request {requestId.slice(-8)}</small>}
           </div>
         </section>
 
         <section className="agent-section">
           <div className="section-heading">
-            <div><p className="eyebrow">Cotal coordination topology</p><h2>One shared space. Five accountable agents.</h2></div>
-            <span className="protocol-chip"><Workflow size={15} /> multicast · unicast · anycast</span>
+            <div><p className="eyebrow">InsForge workflow ledger</p><h2>One durable record. Five accountable stages.</h2></div>
+            <span className="protocol-chip"><Workflow size={15} /> database · checkpoints · approval</span>
           </div>
           <div className="agent-grid">
             {(run?.agents ?? demoRun.agents.map((agent) => ({ ...agent, status: 'idle' as const }))).map((agent, index) => {
@@ -306,7 +324,7 @@ export default function App() {
 
         <section className="workspace-grid">
           <article className="panel event-panel">
-            <header><div><p className="eyebrow">Replayable coordination log</p><h2>Who did what, and why</h2></div><span><BadgeCheck size={15} /> Cotal receipts</span></header>
+            <header><div><p className="eyebrow">InsForge audit trail</p><h2>Who did what, and why</h2></div><span><BadgeCheck size={15} /> Durable checkpoints</span></header>
             <div className="event-log">
               {(run?.events.slice(0, activeEvents) ?? []).map((event) => (
                 <div className="event-row" key={event.sequence}>
@@ -314,12 +332,12 @@ export default function App() {
                   <span className="event-time">{event.timestamp}</span>
                   <div className="event-message"><strong>{event.sender} → {event.recipient}</strong><p>{event.message}</p><small>{event.kind} · {event.phase}</small></div>
                   <span className="signature">
-                    {event.signatureVerified ? <BadgeCheck size={14} /> : event.deliveryVerified ? <Network size={14} /> : <CircleStop size={14} />}
-                    {event.signatureVerified ? 'authenticated' : event.deliveryVerified ? 'mesh receipt' : 'deterministic'}
+                    {event.persisted ? <Database size={14} /> : <CircleStop size={14} />}
+                    {event.persisted ? 'persisted' : 'local'}
                   </span>
                 </div>
               ))}
-              {!run && <div className="empty-log"><Network size={35} /><strong>The mesh is quiet</strong><p>Run a PMID to stream agent handoffs into the shared audit log.</p></div>}
+              {!run && <div className="empty-log"><Database size={35} /><strong>The audit trail is empty</strong><p>Run a PMID to record each workflow checkpoint in InsForge.</p></div>}
             </div>
           </article>
 
@@ -330,11 +348,11 @@ export default function App() {
                 <div key={check.label}><span className={run ? (check.passed ? 'pass' : 'fail') : 'pending'}>{run ? (check.passed ? <Check size={14} /> : <X size={14} />) : <CircleStop size={14} />}</span><div><strong>{check.label}</strong><p>{check.detail}</p></div></div>
               ))}
             </div>
-            <button className="approve-button" onClick={approve} disabled={!run || running || run.status !== 'awaiting_physician'}>
+            <button className="approve-button" onClick={() => void approve()} disabled={!run || running || run.status !== 'awaiting_physician'}>
               <FileCheck2 size={18} />
               {run?.status === 'approved' ? 'Physician approval recorded' : 'Approve as Patrick Tran, MD'}
             </button>
-            <small className="approval-note">No agent can call this action. Approval is a separate human capability.</small>
+            <small className="approval-note">Approval is a separate human action and is written to the same InsForge audit trail.</small>
           </article>
         </section>
 
@@ -372,8 +390,8 @@ export default function App() {
         )}
 
         <section className="integration-strip">
-          <div><Network size={22} /><span><strong>Cotal</strong><small>{cotalLive ? `Live ${run?.meshAuthMode === 'authenticated' ? 'authenticated' : 'loopback'} handoffs` : 'Direct and stage fallbacks ready'}</small></span></div>
-          <div><Database size={22} /><span><strong>InsForge</strong><small>{persistence === 'saved' ? 'Queue and audit trail persisted' : persistence === 'error' ? 'Persistence error' : insforgeConfigured ? 'Connected queue and audit bus' : 'Add credentials for live coordination'}</small></span></div>
+          <div><Database size={22} /><span><strong>InsForge</strong><small>{persistence === 'saved' ? 'Run and audit trail persisted' : persistence === 'error' ? 'Persistence error' : insforgeConfigured ? 'Connected workflow database' : 'Add credentials for durable history'}</small></span></div>
+          <div><Cloud size={22} /><span><strong>Vercel</strong><small>PubMed processing and public cockpit</small></span></div>
           <div><GitPullRequest size={22} /><span><strong>GitHub</strong><small>{run?.status === 'approved' ? 'Ready for publishing PR' : 'Versioned physician release boundary'}</small></span></div>
           {run?.publishPrUrl && <a href={run.publishPrUrl} target="_blank" rel="noreferrer">Open publishing queue <ExternalLink size={14} /></a>}
           {run && <button onClick={reset}><RotateCcw size={14} /> Reset demo</button>}
