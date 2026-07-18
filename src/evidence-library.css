@@ -1,0 +1,42 @@
+.journal-radar { margin: 15px 0 55px; }
+.journal-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 9px; }
+.journal-card { display: grid; min-height: 170px; padding: 15px; border: 1px solid var(--line); border-radius: 14px; color: inherit; background: rgba(255,255,255,.018); cursor: pointer; text-align: left; transition: border-color .2s ease, background .2s ease, transform .2s ease; }
+.journal-card:hover { transform: translateY(-2px); border-color: rgba(200,242,105,.35); }
+.journal-card.active { border-color: rgba(200,242,105,.65); background: rgba(200,242,105,.065); box-shadow: inset 0 0 0 1px rgba(200,242,105,.08); }
+.journal-short { color: var(--lime); font: 700 12px DM Mono, monospace; letter-spacing: .08em; }
+.journal-card strong { margin-top: 15px; color: #d7e5dc; font: 700 13px/1.35 Manrope, sans-serif; }
+.journal-card small { margin-top: 8px; color: #71857a; font-size: 10px; line-height: 1.45; }
+.journal-card em { align-self: end; margin-top: 12px; color: #9fb1a6; font: 500 9px DM Mono, monospace; font-style: normal; text-transform: uppercase; }
+.discovery-controls { display: flex; align-items: end; gap: 10px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.discovery-controls > div { display: grid; flex: 1; gap: 7px; }
+.discovery-controls span { color: #7f9287; font: 500 10px DM Mono, monospace; letter-spacing: .12em; text-transform: uppercase; }
+.discovery-controls input { height: 48px; padding: 0 13px; border: 1px solid rgba(174,205,185,.23); border-radius: 11px; outline: 0; color: #eff8f2; background: rgba(255,255,255,.035); }
+.discovery-list { display: grid; gap: 8px; margin-top: 18px; }
+.discovery-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 14px 15px; border: 1px solid rgba(178,216,193,.1); border-radius: 12px; background: rgba(0,0,0,.1); }
+.discovery-list span { color: #62756a; font: 500 9px DM Mono, monospace; text-transform: uppercase; }
+.discovery-list h3 { margin: 6px 0 0; color: #cbdad0; font: 700 14px/1.4 Manrope, sans-serif; }
+.discovery-list p { margin: 5px 0 0; color: #75887d; font-size: 10px; }
+.discovery-list button { display: inline-flex; align-items: center; gap: 5px; padding: 9px 11px; border: 1px solid rgba(200,242,105,.25); border-radius: 9px; color: var(--lime); background: rgba(200,242,105,.04); cursor: pointer; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.evidence-library { margin: 14px 0; }
+.library-refresh { display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; color: #9caf9f; background: transparent; cursor: pointer; font: 500 10px DM Mono, monospace; text-transform: uppercase; }
+.library-refresh:disabled { opacity: .45; cursor: not-allowed; }
+.library-empty { display: flex; align-items: center; justify-content: center; gap: 13px; min-height: 120px; color: #687c70; text-align: left; }
+.library-empty strong { color: #a9bbb0; font-size: 13px; }
+.library-empty p { margin: 4px 0 0; font-size: 10px; }
+.library-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.library-grid > button { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px; border: 1px solid rgba(178,216,193,.1); border-radius: 12px; color: inherit; background: rgba(255,255,255,.018); cursor: pointer; text-align: left; transition: .2s ease; }
+.library-grid > button:hover { border-color: rgba(122,240,176,.35); background: rgba(122,240,176,.035); }
+.library-score { display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid rgba(200,242,105,.32); border-radius: 50%; color: var(--lime); font: 700 14px Manrope, sans-serif; }
+.library-grid span { color: #64786c; font: 500 8px DM Mono, monospace; text-transform: uppercase; }
+.library-grid strong { display: block; margin-top: 5px; color: #c6d5cb; font: 700 12px/1.4 Manrope, sans-serif; }
+.library-grid small { display: block; margin-top: 6px; color: #7d9085; font: 500 9px DM Mono, monospace; text-transform: uppercase; }
+.library-grid svg { color: #62766a; }
+@media (max-width: 1100px) { .journal-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) {
+  .journal-grid, .library-grid { grid-template-columns: 1fr; }
+  .journal-card { min-height: 145px; }
+  .discovery-controls { align-items: stretch; flex-direction: column; }
+  .discovery-controls .run-button { width: 100%; }
+  .discovery-list article { grid-template-columns: 1fr; }
+  .discovery-list button { justify-content: center; }
+}
