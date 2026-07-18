@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   BadgeCheck,
@@ -13,10 +13,12 @@ import {
   FileCheck2,
   Fingerprint,
   GitPullRequest,
+  Library,
   HeartPulse,
   LoaderCircle,
   LockKeyhole,
   Play,
+  RefreshCw,
   RotateCcw,
   Search,
   ShieldCheck,
@@ -32,7 +34,10 @@ import {
   finalizeEvidenceRun,
   insforgeConfigured,
   persistEvidenceRun,
+  listEvidenceRuns,
 } from './lib/insforge'
+import { curatedJournals } from './journals'
+import './evidence-library.css'
 import type { AgentId, AgentState, CoordinationEvent, EvidenceRun } from './types'
 
 const agentIcons: Record<AgentId, typeof Search> = {
@@ -52,6 +57,14 @@ const statusLabels: Record<AgentState['status'], string> = {
 }
 
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
+type DiscoveryArticle = {
+  pmid: string
+  title: string
+  journal: string
+  publicationDate: string
+  authors: string[]
+}
 
 function isEvidenceRun(value: unknown): value is EvidenceRun {
   return typeof value === 'object' && value !== null && 'article' in value && 'events' in value && 'card' in value
@@ -79,6 +92,14 @@ export default function App() {
   const [approvalState, setApprovalState] = useState<'idle' | 'saving' | 'saved' | 'local' | 'error'>('idle')
   const [selectedEvidence, setSelectedEvidence] = useState(0)
   const [toast, setToast] = useState<string | null>(null)
+  const [selectedJournal, setSelectedJournal] = useState('jaad')
+  const [topic, setTopic] = useState('')
+  const [discovering, setDiscovering] = useState(false)
+  const [discoveries, setDiscoveries] = useState<DiscoveryArticle[]>([])
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null)
+  const [libraryRuns, setLibraryRuns] = useState<EvidenceRun[]>([])
+  const [libraryLoading, setLibraryLoading] = useState(false)
+  const [libraryError, setLibraryError] = useState<string | null>(null)
   const pmidInputRef = useRef<HTMLInputElement>(null)
   const toastTimerRef = useRef<number | undefined>(undefined)
 
@@ -91,6 +112,63 @@ export default function App() {
     setToast(message)
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current)
     toastTimerRef.current = window.setTimeout(() => setToast(null), 3600)
+  }
+
+  const refreshLibrary = async () => {
+    if (!insforgeConfigured) {
+      setLibraryRuns([])
+      return
+    }
+    setLibraryLoading(true)
+    setLibraryError(null)
+    try {
+      setLibraryRuns(await listEvidenceRuns(12))
+    } catch {
+      setLibraryError('InsForge could not load the evidence library.')
+    } finally {
+      setLibraryLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void refreshLibrary()
+  }, [])
+
+  const discoverEvidence = async () => {
+    setDiscovering(true)
+    setDiscoveryError(null)
+    try {
+      const response = await fetch('/api/discover-evidence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ journal: selectedJournal, topic: topic.trim() }),
+      })
+      const payload: unknown = await response.json()
+      if (!response.ok || typeof payload !== 'object' || payload === null || !('articles' in payload) || !Array.isArray(payload.articles)) {
+        const message = typeof payload === 'object' && payload && 'error' in payload
+          ? String(payload.error)
+          : 'Could not discover recent papers.'
+        throw new Error(message)
+      }
+      setDiscoveries(payload.articles as DiscoveryArticle[])
+    } catch (discoveryFailure) {
+      setDiscoveryError(discoveryFailure instanceof Error ? discoveryFailure.message : 'Could not discover recent papers.')
+    } finally {
+      setDiscovering(false)
+    }
+  }
+
+  const openLibraryRun = (savedRun: EvidenceRun) => {
+    setRun(savedRun)
+    setPmid(savedRun.article.pmid)
+    setActiveEvents(savedRun.events.length)
+    setSelectedEvidence(0)
+    setPersistence('saved')
+    setApprovalState(savedRun.status === 'approved' ? 'saved' : 'idle')
+    setError(null)
+    window.setTimeout(() => {
+      document.getElementById('audit-trail')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 60)
   }
 
   const animateAndPersist = async (nextRun: EvidenceRun, useDemo: boolean) => {
@@ -159,13 +237,14 @@ export default function App() {
     }
 
     setRun(completedRun)
+    if (databaseHealthy) void refreshLibrary()
   }
 
-  const fetchProcessedRun = async () => {
+  const fetchProcessedRun = async (targetPmid: string) => {
     const response = await fetch('/api/process-evidence', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pmid: pmid.replace(/\D/g, '') }),
+      body: JSON.stringify({ pmid: targetPmid.replace(/\D/g, '') }),
     })
     const payload: unknown = await response.json()
     if (!response.ok || !isEvidenceRun(payload)) {
@@ -177,7 +256,8 @@ export default function App() {
     return payload
   }
 
-  const executeRun = async (useDemo = false) => {
+  const executeRun = async (useDemo = false, pmidOverride?: string) => {
+    const targetPmid = (pmidOverride ?? pmid).replace(/\D/g, '')
     setRunning(true)
     setRun(null)
     setActiveEvents(0)
@@ -191,7 +271,7 @@ export default function App() {
       if (useDemo) {
         await animateAndPersist(normalizeRun(demoRun, 'stage-demo'), true)
       } else {
-        const processed = await fetchProcessedRun()
+        const processed = await fetchProcessedRun(targetPmid)
         await animateAndPersist(
           normalizeRun(processed, insforgeConfigured ? 'insforge-live' : 'vercel-direct'),
           false,
@@ -246,6 +326,7 @@ export default function App() {
       setRun(persistedRun)
       setPersistence('saved')
       setApprovalState('saved')
+      void refreshLibrary()
     } catch {
       setPersistence('error')
       setApprovalState('error')
@@ -283,6 +364,8 @@ export default function App() {
       : run?.executionSource === 'stage-demo'
         ? 'Stage demo'
         : 'Ready'
+
+  const currentJournal = curatedJournals.find((journal) => journal.id === selectedJournal) ?? curatedJournals[0]
 
   const approvalCopy = approvalState === 'saving'
     ? 'Publisher is unlocked. Saving the physician approval to InsForge…'
@@ -377,6 +460,53 @@ export default function App() {
               <div><dt>Autonomous releases</dt><dd>0</dd></div>
             </dl>
           </div>
+        </section>
+
+        <section className="journal-radar panel">
+          <header>
+            <div><p className="eyebrow">Curated journal radar</p><h2>Discover recent evidence from leading dermatology journals.</h2></div>
+            <span><Search size={15} /> PubMed discovery</span>
+          </header>
+          <div className="journal-grid">
+            {curatedJournals.map((journal) => (
+              <button
+                type="button"
+                className={selectedJournal === journal.id ? 'journal-card active' : 'journal-card'}
+                onClick={() => { setSelectedJournal(journal.id); setDiscoveries([]); setDiscoveryError(null) }}
+                key={journal.id}
+              >
+                <span className="journal-short">{journal.shortName}</span>
+                <strong>{journal.name}</strong>
+                <small>{journal.focus}</small>
+                <em>{journal.metricYear} JIF {journal.impactFactor.toFixed(1)}</em>
+              </button>
+            ))}
+          </div>
+          <div className="discovery-controls">
+            <div>
+              <span>Optional topic</span>
+              <input value={topic} onChange={(event) => setTopic(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !discovering) void discoverEvidence() }} placeholder="psoriasis, melanoma, hidradenitis…" />
+            </div>
+            <button className="run-button" onClick={() => void discoverEvidence()} disabled={discovering}>
+              {discovering ? <LoaderCircle className="spin" size={18} /> : <Search size={18} />}
+              {discovering ? 'Searching PubMed' : `Find recent ${currentJournal.shortName} papers`}
+            </button>
+          </div>
+          {discoveryError && <div className="error-banner"><X size={17} /> {discoveryError}<button onClick={() => setDiscoveryError(null)}>Dismiss</button></div>}
+          {discoveries.length > 0 && (
+            <div className="discovery-list">
+              {discoveries.map((article) => (
+                <article key={article.pmid}>
+                  <div>
+                    <span>PMID {article.pmid} · {article.publicationDate}</span>
+                    <h3>{article.title}</h3>
+                    <p>{article.authors.join(', ')}</p>
+                  </div>
+                  <button onClick={() => { setPmid(article.pmid); void executeRun(false, article.pmid) }}>Run this paper <ChevronRight size={15} /></button>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="agent-section">
@@ -490,6 +620,38 @@ export default function App() {
             </div>
           </section>
         )}
+
+        <section className="evidence-library panel">
+          <header>
+            <div><p className="eyebrow">InsForge evidence library</p><h2>Reopen every prior run and its physician approval trail.</h2></div>
+            <button className="library-refresh" onClick={() => void refreshLibrary()} disabled={!insforgeConfigured || libraryLoading}>
+              <RefreshCw className={libraryLoading ? 'spin' : ''} size={15} /> Refresh
+            </button>
+          </header>
+          {!insforgeConfigured ? (
+            <div className="library-empty"><Database size={28} /><div><strong>Connect InsForge to activate durable history.</strong><p>Saved evidence runs will appear here automatically.</p></div></div>
+          ) : libraryError ? (
+            <div className="error-banner"><X size={17} /> {libraryError}<button onClick={() => void refreshLibrary()}>Retry</button></div>
+          ) : libraryLoading && libraryRuns.length === 0 ? (
+            <div className="library-empty"><LoaderCircle className="spin" size={28} /><div><strong>Loading evidence history</strong><p>Reading the latest durable records from InsForge.</p></div></div>
+          ) : libraryRuns.length === 0 ? (
+            <div className="library-empty"><Library size={28} /><div><strong>No saved runs yet.</strong><p>Complete a workflow and it will become the first library record.</p></div></div>
+          ) : (
+            <div className="library-grid">
+              {libraryRuns.map((savedRun) => (
+                <button type="button" onClick={() => openLibraryRun(savedRun)} key={savedRun.id}>
+                  <div className="library-score">{savedRun.score}</div>
+                  <div>
+                    <span>PMID {savedRun.article.pmid} · {savedRun.article.journal}</span>
+                    <strong>{savedRun.article.title}</strong>
+                    <small>{savedRun.status.replaceAll('_', ' ')} · {savedRun.events.length} audit events</small>
+                  </div>
+                  <ChevronRight size={18} />
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
 
         <section className="integration-strip">
           <div><Database size={22} /><span><strong>InsForge</strong><small>{persistence === 'saved' ? 'Run and audit trail persisted' : persistence === 'error' ? 'Persistence error' : insforgeConfigured ? 'Connected workflow database' : 'Add credentials for durable history'}</small></span></div>
