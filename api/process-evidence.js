@@ -3,13 +3,39 @@ const BIOC_BASE = 'https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pubmed.c
 const TOOL = 'dermbrief-evidenceops'
 const EMAIL = 'patrick@trandermatology.com'
 
-const JOURNALS = [
-  ['Journal of the American Academy of Dermatology', 'JAAD'],
-  ['American Journal of Clinical Dermatology', 'Am J Clin Dermatol'],
-  ['JAMA Dermatology', 'JAMA Dermatology'],
-  ['British Journal of Dermatology', 'BJD'],
-  ['Journal of the European Academy of Dermatology and Venereology', 'JEADV'],
-  ['Journal of Investigative Dermatology', 'JID'],
+export const JOURNALS = [
+  {
+    canonical: 'Journal of the American Academy of Dermatology',
+    aliases: ['Journal of the American Academy of Dermatology', 'J Am Acad Dermatol', 'JAAD'],
+  },
+  {
+    canonical: 'American Journal of Clinical Dermatology',
+    aliases: ['American Journal of Clinical Dermatology', 'Am J Clin Dermatol', 'AJCD'],
+  },
+  {
+    canonical: 'JAMA Dermatology',
+    aliases: ['JAMA Dermatology', 'JAMA Dermatol'],
+  },
+  {
+    canonical: 'British Journal of Dermatology',
+    aliases: ['British Journal of Dermatology', 'The British Journal of Dermatology', 'Br J Dermatol', 'BJD'],
+  },
+  {
+    canonical: 'Journal of the European Academy of Dermatology and Venereology',
+    aliases: [
+      'Journal of the European Academy of Dermatology and Venereology',
+      'J Eur Acad Dermatol Venereol',
+      'JEADV',
+    ],
+  },
+  {
+    canonical: 'Journal of Investigative Dermatology',
+    aliases: ['Journal of Investigative Dermatology', 'The Journal of Investigative Dermatology', 'J Invest Dermatol', 'JID'],
+  },
+  {
+    canonical: 'JAAD International',
+    aliases: ['JAAD International', 'JAAD Int'],
+  },
 ]
 
 function json(data, status = 200) {
@@ -38,12 +64,19 @@ async function fetchJson(url) {
   return response.json()
 }
 
-function journalMatch(value) {
-  const normalized = clean(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
-  return JOURNALS.find(([name, alias]) => {
-    const options = [name, alias].map((item) => item.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim())
-    return options.includes(normalized)
-  })
+export function normalizeJournalName(value) {
+  return clean(value)
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/\bthe\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function journalMatch(...values) {
+  const candidates = values.flat().map(normalizeJournalName).filter(Boolean)
+  return JOURNALS.find((journal) => journal.aliases.some((alias) => candidates.includes(normalizeJournalName(alias))))
 }
 
 function passages(value, output = []) {
@@ -133,9 +166,14 @@ async function getArticle(pmid) {
   const summaryPayload = await fetchJson(summaryUrl)
   const record = summaryPayload?.result?.[pmid]
   if (!isRecord(record)) return null
-  const journal = clean(record.fulljournalname) || clean(record.source)
-  const matched = journalMatch(journal)
-  if (!matched) throw Object.assign(new Error(`${journal || 'This journal'} is outside the DermBrief hackathon whitelist.`), { status: 403 })
+
+  const journalCandidates = [clean(record.fulljournalname), clean(record.source)].filter(Boolean)
+  const matched = journalMatch(journalCandidates)
+  if (!matched) {
+    const observed = journalCandidates.join(' / ') || 'This journal'
+    throw Object.assign(new Error(`${observed} is outside the DermBrief curated journal set.`), { status: 403 })
+  }
+
   const bioc = await fetchJson(new URL(`${BIOC_BASE}/BioC_json/${pmid}/unicode`))
   const text = articleText(bioc)
   if (!text.abstract) throw Object.assign(new Error('PubMed did not provide an abstract for this record.'), { status: 422 })
@@ -144,7 +182,7 @@ async function getArticle(pmid) {
   return {
     pmid,
     title: text.title || clean(record.title),
-    journal: matched[0],
+    journal: matched.canonical,
     publicationDate: clean(record.pubdate) || clean(record.sortpubdate),
     authors: Array.isArray(record.authors) ? record.authors.map((author) => clean(author?.name)).filter(Boolean) : [],
     abstract: text.abstract,
