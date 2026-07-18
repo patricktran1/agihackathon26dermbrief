@@ -1,12 +1,13 @@
 {
   "name": "agihackathon26dermbrief",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "check": "tsc -b --pretty false",
+    "test:journals": "node scripts/test-journals.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
