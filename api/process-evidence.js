@@ -5,10 +5,10 @@ const EMAIL = 'patrick@trandermatology.com'
 
 const JOURNALS = [
   ['Journal of the American Academy of Dermatology', 'JAAD'],
+  ['American Journal of Clinical Dermatology', 'Am J Clin Dermatol'],
   ['JAMA Dermatology', 'JAMA Dermatology'],
   ['British Journal of Dermatology', 'BJD'],
   ['Journal of the European Academy of Dermatology and Venereology', 'JEADV'],
-  ['JAAD International', 'JAAD International'],
   ['Journal of Investigative Dermatology', 'JID'],
 ]
 
