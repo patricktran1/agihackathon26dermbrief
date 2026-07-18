@@ -1,5 +1,8 @@
 export type AgentId = 'scout' | 'appraiser' | 'grounder' | 'auditor' | 'publisher'
 export type AgentStatus = 'idle' | 'working' | 'complete' | 'blocked' | 'waiting'
+export type RunStatus = 'queued' | 'processing' | 'awaiting_physician' | 'approved' | 'blocked'
+export type ExecutionSource = 'stage-demo' | 'vercel-direct' | 'cotal-live'
+export type MeshAuthMode = 'simulated' | 'open-loopback' | 'authenticated'
 
 export type AgentState = {
   id: AgentId
@@ -17,6 +20,8 @@ export type CoordinationEvent = {
   kind: 'multicast' | 'unicast' | 'anycast' | 'approval'
   message: string
   signatureVerified: boolean
+  deliveryVerified?: boolean
+  cotalMessageId?: string
   phase: string
 }
 
@@ -54,7 +59,10 @@ export type EvidenceRun = {
   id: string
   startedAt: string
   completedAt: string
-  status: 'awaiting_physician' | 'approved' | 'blocked'
+  status: RunStatus
+  executionSource?: ExecutionSource
+  meshAuthMode?: MeshAuthMode
+  requestId?: string
   score: number
   scoreReasons: string[]
   safetyChecks: { label: string; passed: boolean; detail: string }[]
@@ -63,4 +71,16 @@ export type EvidenceRun = {
   article: ArticleRecord
   card: LearningCard
   publishPrUrl?: string
+}
+
+export type EvidenceRunRequest = {
+  id: string
+  pmid: string
+  status: 'queued' | 'processing' | 'complete' | 'error'
+  requested_at: string
+  claimed_at?: string | null
+  completed_at?: string | null
+  result_run_id?: string | null
+  error?: string | null
+  worker_id?: string | null
 }
