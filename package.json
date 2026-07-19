@@ -1,21 +1,25 @@
 {
   "name": "agihackathon26dermbrief",
   "private": true,
-  "version": "1.3.0",
+  "version": "1.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "npm run test:journals && npm run test:inbox && npm run test:ai",
     "build": "tsc -b && vite build",
     "check": "tsc -b --pretty false",
     "test:journals": "node scripts/test-journals.mjs",
     "test:inbox": "node scripts/test-daily-brief.mjs",
+    "test:ai": "node scripts/test-ai-governance.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
     "@insforge/sdk": "1.4.5",
+    "ai": "6.0.224",
     "lucide-react": "1.25.0",
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/react": "19.2.17",
