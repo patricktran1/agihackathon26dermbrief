@@ -53,6 +53,24 @@ export type LearningCard = {
   evidenceMap: EvidenceMapEntry[]
 }
 
+export type AIExecution = {
+  mode: 'llm-assisted' | 'deterministic-fallback'
+  grounderModel: string
+  auditorModel: string
+  grounderAttempted: boolean
+  grounderAccepted: boolean
+  auditorAttempted: boolean
+  auditorApproved: boolean
+  verdict: string
+  issues: string[]
+  deterministicChecks: {
+    exactQuotes: boolean
+    correctAnswerMapped: boolean
+    languageSafe: boolean
+    abstractBoundaryExplicit: boolean
+  }
+}
+
 export type EvidenceRun = {
   id: string
   startedAt: string
@@ -66,5 +84,6 @@ export type EvidenceRun = {
   events: CoordinationEvent[]
   article: ArticleRecord
   card: LearningCard
+  ai?: AIExecution
   publishPrUrl?: string
 }
