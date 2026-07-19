@@ -1,3 +1,5 @@
+import { generateAiEvidence } from './ai-evidence.js'
+
 const EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
 const BIOC_BASE = 'https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pubmed.cgi'
 const TOOL = 'dermbrief-evidenceops'
@@ -146,15 +148,16 @@ function makeCard(article, score) {
   }
 }
 
-function events(article, score) {
+function events(article, score, ai) {
   const time = () => new Date().toISOString().slice(11, 19)
+  const llmAssisted = ai.mode === 'llm-assisted'
   return [
     { sequence: 1, timestamp: time(), sender: 'scout', recipient: 'workflow', kind: 'checkpoint', phase: 'Discovery', message: `PMID ${article.pmid} retrieved from ${article.journal}; whitelist identity verified.`, sourceVerified: true },
     { sequence: 2, timestamp: time(), sender: 'scout', recipient: 'appraiser', kind: 'handoff', phase: 'Handoff', message: 'Verified metadata and abstract passed to evidence appraisal.', sourceVerified: true },
     { sequence: 3, timestamp: time(), sender: 'appraiser', recipient: 'workflow', kind: 'checkpoint', phase: 'Appraisal', message: `Deterministic evidence score: ${score}/100.`, sourceVerified: true },
-    { sequence: 4, timestamp: time(), sender: 'appraiser', recipient: 'grounder', kind: 'handoff', phase: 'Delegation', message: 'Create one defensible learning card bounded by the abstract.', sourceVerified: true },
-    { sequence: 5, timestamp: time(), sender: 'grounder', recipient: 'auditor', kind: 'handoff', phase: 'Grounding', message: 'Card and claim-level source mappings submitted for safety review.', sourceVerified: true },
-    { sequence: 6, timestamp: time(), sender: 'auditor', recipient: 'publisher', kind: 'checkpoint', phase: 'Safety', message: 'Source strings verified. Publisher blocked until physician approval.', sourceVerified: true },
+    { sequence: 4, timestamp: time(), sender: 'appraiser', recipient: 'grounder', kind: 'handoff', phase: 'Delegation', message: llmAssisted ? `Schema-bound Grounder invoked ${ai.grounderModel} using only PubMed abstract data.` : 'AI draft was unavailable or rejected; deterministic Grounder fallback retained.', sourceVerified: true },
+    { sequence: 5, timestamp: time(), sender: 'grounder', recipient: 'auditor', kind: 'handoff', phase: 'Grounding', message: llmAssisted ? 'Grounded card and exact source mappings submitted to an independent AI audit pass.' : 'Deterministic card and exact source mappings submitted for safety review.', sourceVerified: true },
+    { sequence: 6, timestamp: time(), sender: 'auditor', recipient: 'publisher', kind: 'checkpoint', phase: 'Safety', message: llmAssisted ? 'AI Auditor approved the bounded draft; deterministic quote and language checks passed. Publisher remains blocked.' : 'Deterministic source checks passed. Publisher remains blocked until physician approval.', sourceVerified: true },
   ]
 }
 
@@ -200,18 +203,24 @@ export default {
       if (!pmid) return json({ error: 'A valid PMID is required.' }, 400)
       const article = await getArticle(pmid)
       if (!article) return json({ error: 'PubMed record not found.' }, 404)
+
       const appraisal = scoreArticle(article.title, article.abstract)
-      const card = makeCard(article, appraisal.score)
+      const deterministicCard = makeCard(article, appraisal.score)
+      const { card, ai } = await generateAiEvidence(article, appraisal, deterministicCard)
       const evidenceQuotesValid = card.evidenceMap.every((entry) => article.abstract.includes(entry.sourceQuote))
-      const safe = evidenceQuotesValid && appraisal.score >= 65
+      const aiGovernancePassed = ai.mode === 'deterministic-fallback' || (ai.auditorApproved && Object.values(ai.deterministicChecks).every(Boolean))
+      const safe = evidenceQuotesValid && appraisal.score >= 65 && aiGovernancePassed
+      const llmAssisted = ai.mode === 'llm-assisted'
+
       const agents = [
         { id: 'scout', name: 'Scout', role: 'Literature scout', description: 'Retrieves and verifies the PubMed record.', status: 'complete' },
-        { id: 'appraiser', name: 'Appraiser', role: 'Evidence appraiser', description: 'Scores design quality, bias, and clinical signal.', status: 'complete' },
-        { id: 'grounder', name: 'Grounder', role: 'Clinical educator', description: 'Builds the card with claim-level evidence links.', status: safe ? 'complete' : 'blocked' },
-        { id: 'auditor', name: 'Safety Auditor', role: 'Medical safety', description: 'Rejects unsupported language and ambiguity.', status: safe ? 'complete' : 'blocked' },
+        { id: 'appraiser', name: 'Appraiser', role: 'Evidence appraiser', description: 'Applies the transparent deterministic evidence-quality score.', status: 'complete' },
+        { id: 'grounder', name: 'Grounder', role: llmAssisted ? 'Schema-bound AI educator' : 'Deterministic clinical educator', description: llmAssisted ? 'Drafts one bounded card from the abstract with claim-level source links.' : 'Retains the tested deterministic card when AI does not clear governance.', status: safe ? 'complete' : 'blocked' },
+        { id: 'auditor', name: 'Safety Auditor', role: llmAssisted ? 'Independent AI plus deterministic safety' : 'Deterministic medical safety', description: 'Rejects unsupported language and verifies every quoted source string.', status: safe ? 'complete' : 'blocked' },
         { id: 'publisher', name: 'Publisher', role: 'Release manager', description: 'Creates a versioned PR only after physician approval.', status: 'waiting' },
       ]
       const startedAt = new Date().toISOString()
+
       return json({
         id: `run-${pmid}-${Date.now()}`,
         startedAt,
@@ -223,13 +232,15 @@ export default {
         safetyChecks: [
           { label: 'Journal scope', passed: true, detail: `${article.journal} matches the curated whitelist.` },
           { label: 'Evidence threshold', passed: appraisal.score >= 65, detail: `Deterministic quality score ${appraisal.score}/100.` },
-          { label: 'Source grounding', passed: evidenceQuotesValid, detail: evidenceQuotesValid ? 'Every quoted excerpt exists verbatim in the abstract.' : 'At least one generated quote could not be verified.' },
+          { label: 'Source grounding', passed: evidenceQuotesValid, detail: evidenceQuotesValid ? 'Every quoted excerpt exists verbatim in the PubMed abstract.' : 'At least one generated quote could not be verified.' },
+          { label: 'AI governance', passed: aiGovernancePassed, detail: llmAssisted ? `Grounder and Auditor completed with ${ai.grounderModel}; deterministic veto checks passed.` : 'AI output was unavailable or rejected, so the tested deterministic fallback was retained.' },
           { label: 'Human boundary', passed: true, detail: 'Publisher remains unavailable until a physician approves.' },
         ],
         agents,
-        events: events(article, appraisal.score),
+        events: events(article, appraisal.score, ai),
         article,
         card,
+        ai,
       })
     } catch (error) {
       console.error(error)
