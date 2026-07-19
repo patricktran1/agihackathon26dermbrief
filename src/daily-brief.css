@@ -1,0 +1,70 @@
+.brief-launcher { position: fixed; right: 24px; bottom: 24px; z-index: 42; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-width: 238px; padding: 10px 12px; border: 1px solid rgba(200,242,105,.42); border-radius: 15px; color: #dce9e0; background: rgba(10,25,17,.96); box-shadow: 0 22px 70px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.04); backdrop-filter: blur(18px); cursor: pointer; text-align: left; transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+.brief-launcher:hover { transform: translateY(-2px); border-color: rgba(200,242,105,.72); box-shadow: 0 26px 80px rgba(0,0,0,.48), 0 0 0 1px rgba(200,242,105,.08); }
+.brief-launcher > span { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 12px; color: #0a160e; background: var(--lime); }
+.brief-launcher > div { display: grid; }
+.brief-launcher strong { font: 700 13px Manrope, sans-serif; }
+.brief-launcher small { margin-top: 3px; color: #8da096; font-size: 9px; }
+.brief-launcher > svg { color: #778b7f; }
+.brief-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 24px; background: rgba(2,8,5,.78); backdrop-filter: blur(12px); }
+.brief-modal { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; width: min(1180px, 96vw); max-height: min(900px, 94vh); overflow: hidden; border: 1px solid rgba(178,216,193,.18); border-radius: 24px; color: #e9f2ec; background: linear-gradient(145deg, rgba(18,35,27,.99), rgba(7,17,13,.995)); box-shadow: 0 45px 150px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.04); }
+.brief-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 24px 26px 20px; border-bottom: 1px solid var(--line); }
+.brief-title-row { display: grid; grid-template-columns: 48px 1fr; align-items: start; gap: 13px; }
+.brief-icon { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid rgba(200,242,105,.3); border-radius: 14px; color: var(--lime); background: rgba(200,242,105,.07); }
+.brief-title-row p { margin: 0 0 6px; color: var(--lime); font: 500 10px DM Mono, monospace; letter-spacing: .12em; text-transform: uppercase; }
+.brief-title-row h2 { margin: 0; color: #f3faf5; font: 800 clamp(24px, 3vw, 37px)/1.05 Manrope, sans-serif; letter-spacing: -.04em; }
+.brief-title-row small { display: block; margin-top: 8px; color: #84978b; font-size: 11px; line-height: 1.5; }
+.brief-close { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 1px solid var(--line); border-radius: 11px; color: #8fa297; background: transparent; cursor: pointer; }
+.brief-journal-strip { display: flex; gap: 7px; padding: 12px 26px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+.brief-journal-strip span { padding: 6px 8px; border: 1px solid rgba(178,216,193,.11); border-radius: 999px; color: #8da096; background: rgba(255,255,255,.018); font: 500 9px DM Mono, monospace; white-space: nowrap; }
+.brief-controls { display: flex; align-items: end; gap: 10px; padding: 18px 26px; border-bottom: 1px solid var(--line); }
+.brief-controls label { display: grid; flex: 1; gap: 7px; }
+.brief-controls label > span { color: #7f9287; font: 500 9px DM Mono, monospace; letter-spacing: .11em; text-transform: uppercase; }
+.brief-controls label > div { display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 12px; border: 1px solid rgba(174,205,185,.22); border-radius: 11px; background: rgba(255,255,255,.03); }
+.brief-controls input { width: 100%; border: 0; outline: 0; color: #eff8f2; background: transparent; }
+.brief-controls > button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 16px; border: 0; border-radius: 11px; color: #09140d; background: var(--lime); cursor: pointer; font-weight: 800; white-space: nowrap; }
+.brief-controls > button:disabled { opacity: .55; cursor: not-allowed; }
+.brief-error { display: flex; align-items: center; gap: 8px; margin: 14px 26px 0; padding: 10px 12px; border: 1px solid rgba(244,128,116,.32); border-radius: 10px; color: #ffc1b9; background: rgba(119,39,32,.22); font-size: 12px; }
+.brief-error span { flex: 1; }
+.brief-error button { border: 0; color: inherit; background: transparent; cursor: pointer; text-decoration: underline; }
+.brief-loading { display: grid; min-height: 320px; place-items: center; align-content: center; gap: 9px; padding: 35px; color: #71857a; text-align: center; }
+.brief-loading strong { color: #c1d1c6; font: 700 16px Manrope, sans-serif; }
+.brief-loading p { max-width: 480px; margin: 0; font-size: 11px; line-height: 1.55; }
+.brief-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 16px 26px 8px; }
+.brief-metrics > div { display: grid; min-height: 78px; align-content: center; padding: 12px 14px; border: 1px solid rgba(178,216,193,.1); border-radius: 12px; background: rgba(255,255,255,.018); }
+.brief-metrics strong { color: #edf7f0; font: 800 21px Manrope, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brief-metrics span { margin-top: 4px; color: #708378; font: 500 8px DM Mono, monospace; text-transform: uppercase; }
+.brief-list { display: grid; gap: 8px; padding: 8px 26px 22px; overflow: auto; }
+.brief-paper { display: grid; grid-template-columns: 42px minmax(0, 1fr) 112px; align-items: center; gap: 14px; padding: 15px; border: 1px solid rgba(178,216,193,.1); border-radius: 14px; background: rgba(0,0,0,.11); }
+.brief-paper.top-paper { border-color: rgba(200,242,105,.3); background: rgba(200,242,105,.035); }
+.brief-rank { color: #56695d; font: 700 11px DM Mono, monospace; text-align: center; }
+.brief-paper-copy { min-width: 0; }
+.brief-paper-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.brief-paper-meta span { display: inline-flex; align-items: center; gap: 4px; color: #687c70; font: 500 8px DM Mono, monospace; text-transform: uppercase; }
+.brief-paper-meta span:first-child { color: var(--lime); }
+.brief-paper h3 { margin: 7px 0 0; color: #d3e1d8; font: 700 14px/1.4 Manrope, sans-serif; }
+.brief-paper p { margin: 5px 0 0; color: #75887d; font-size: 9px; }
+.brief-reasons { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.brief-reasons strong, .brief-reasons span { display: inline-flex; align-items: center; gap: 4px; padding: 5px 7px; border-radius: 7px; font-size: 8px; }
+.brief-reasons strong { color: #0a160e; background: var(--mint); }
+.brief-reasons span { color: #8fa297; background: rgba(255,255,255,.035); }
+.brief-breakdown { display: block; margin-top: 8px; color: #5f7367; font: 500 8px/1.45 DM Mono, monospace; }
+.brief-paper-action { display: grid; justify-items: stretch; gap: 8px; }
+.brief-score { display: grid; justify-items: center; padding: 8px; border: 1px solid rgba(200,242,105,.25); border-radius: 11px; }
+.brief-score strong { color: var(--lime); font: 800 21px Manrope, sans-serif; }
+.brief-score span { color: #687b70; font: 500 7px DM Mono, monospace; text-transform: uppercase; }
+.brief-paper-action button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 34px; padding: 0 8px; border: 1px solid rgba(200,242,105,.24); border-radius: 9px; color: var(--lime); background: rgba(200,242,105,.035); cursor: pointer; font-size: 8px; font-weight: 800; }
+.brief-footer { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 12px 26px; border-top: 1px solid var(--line); color: #64776b; font-size: 9px; }
+.brief-footer small { color: #53665b; font: 500 8px DM Mono, monospace; text-align: right; }
+@media (max-width: 760px) {
+  .brief-launcher { right: 12px; bottom: 12px; min-width: 205px; }
+  .brief-backdrop { align-items: end; padding: 0; }
+  .brief-modal { width: 100vw; max-height: 94vh; border-radius: 22px 22px 0 0; }
+  .brief-header, .brief-controls, .brief-journal-strip, .brief-list, .brief-footer { padding-left: 16px; padding-right: 16px; }
+  .brief-controls { align-items: stretch; flex-direction: column; }
+  .brief-controls > button { width: 100%; }
+  .brief-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 16px; padding-right: 16px; }
+  .brief-paper { grid-template-columns: 32px minmax(0, 1fr); }
+  .brief-paper-action { grid-column: 2; grid-template-columns: 78px minmax(0, 1fr); align-items: stretch; }
+  .brief-footer { align-items: flex-start; flex-direction: column; }
+  .brief-footer small { text-align: left; }
+}
