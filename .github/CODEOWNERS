@@ -1,0 +1,8 @@
+# Default ownership for all repository changes.
+* @patricktran1
+
+# Clinical safety and evidence-governance surfaces.
+/api/ @patricktran1
+/test/ @patricktran1
+/AI_ARCHITECTURE.md @patricktran1
+/SECURITY.md @patricktran1
