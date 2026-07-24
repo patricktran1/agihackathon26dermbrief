@@ -14,8 +14,9 @@ concurrency:
 
 jobs:
   validate:
+    name: Static, governance, and production validation
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +27,29 @@ jobs:
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
+      - name: Capture high-severity dependency audit
+        id: audit
+        shell: bash
+        run: |
+          set +e
+          npm audit --audit-level=high --json > npm-audit.json
+          exit_code=$?
+          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload dependency audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dermbrief-npm-audit
+          path: npm-audit.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce dependency audit
+        if: steps.audit.outputs.exit_code != '0'
+        run: exit 1
 
       - name: Syntax checks
         run: npm run lint
@@ -53,4 +77,40 @@ jobs:
           name: node-test-coverage
           path: coverage/node-test-coverage.txt
           if-no-files-found: error
+          retention-days: 14
+
+  physician-boundary-e2e:
+    name: Physician release boundary in production build
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build production application
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run physician release boundary flow
+        run: npm run test:e2e
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dermbrief-playwright-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
           retention-days: 14
