@@ -90,7 +90,7 @@ function passages(value, output = []) {
   return output
 }
 
-function articleText(payload) {
+export function articleText(payload) {
   const all = passages(payload)
   const title = all.find((passage) => clean(passage.infons?.type).toLowerCase() === 'title')
   const abstractParts = all.filter((passage) => clean(passage.infons?.type).toLowerCase().startsWith('abstract'))
@@ -101,7 +101,7 @@ function articleText(payload) {
   return { title: clean(title?.text), abstract: sections.map((section) => section.text).join(' '), sections }
 }
 
-function scoreArticle(title, abstract) {
+export function scoreArticle(title, abstract) {
   const text = `${title} ${abstract}`.toLowerCase()
   let score = 48
   const reasons = []
@@ -119,12 +119,12 @@ function scoreArticle(title, abstract) {
   return { score: Math.max(30, Math.min(95, Math.round(score))), reasons: reasons.slice(0, 5) }
 }
 
-function findResultSentence(abstract) {
+export function findResultSentence(abstract) {
   const sentences = abstract.split(/(?<=[.!?])\s+/).map((sentence) => sentence.trim()).filter((sentence) => sentence.length > 35)
   return sentences.find((sentence) => /significant|higher|lower|improved|response|associated|reduced|increase|decrease/i.test(sentence)) || sentences.at(-1) || abstract.slice(0, 420)
 }
 
-function makeCard(article, score) {
+export function makeCard(article, score) {
   const result = findResultSentence(article.abstract)
   const cautiousResult = result.replace(/^results?:?\s*/i, '')
   return {
@@ -148,7 +148,7 @@ function makeCard(article, score) {
   }
 }
 
-function events(article, score, ai) {
+export function events(article, score, ai) {
   const time = () => new Date().toISOString().slice(11, 19)
   const llmAssisted = ai.mode === 'llm-assisted'
   return [
