@@ -1,5 +1,10 @@
 # DermBrief EvidenceOps
 
+[![CI](https://github.com/patricktran1/agihackathon26dermbrief/actions/workflows/ci.yml/badge.svg)](https://github.com/patricktran1/agihackathon26dermbrief/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/patricktran1/agihackathon26dermbrief/actions/workflows/codeql.yml/badge.svg)](https://github.com/patricktran1/agihackathon26dermbrief/actions/workflows/codeql.yml)
+[![Dependency Review](https://github.com/patricktran1/agihackathon26dermbrief/actions/workflows/dependency-review.yml/badge.svg)](https://github.com/patricktran1/agihackathon26dermbrief/actions/workflows/dependency-review.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/patricktran1/agihackathon26dermbrief/badge)](https://scorecard.dev/viewer/?uri=github.com/patricktran1/agihackathon26dermbrief)
+
 **Clinical AI that knows where autonomy should end.**
 
 DermBrief EvidenceOps is a physician-gated clinical evidence workflow for dermatology. Today’s DermBrief scans six curated journals for recent PubMed papers with abstracts, prioritizes them using transparent deterministic triage signals, and launches a physician-selected PMID into five accountable stages: Scout, Appraiser, Grounder, Safety Auditor, and Publisher.
@@ -119,10 +124,28 @@ There is no worker, local daemon, NATS server, Cotal dependency, or second coord
 
 Use **Stage Demo** as the venue-network fallback. It follows the same physician approval boundary and is persisted when InsForge is connected.
 
+## Automated quality and supply-chain policy
+
+The repository treats GitHub Actions as executable evidence rather than decorative badges:
+
+- Node.js 22 and a committed npm lockfile make dependency installation reproducible through `npm ci`.
+- CI enforces source-only coverage floors of **65% lines**, **70% functions**, and **75% branches** across deterministic API code.
+- Grounder and Auditor execution tests prove disabled-model behavior, Grounder rejection, Auditor rejection, governed fallback, redacted infrastructure failures, and the successful two-model path.
+- Deterministic process tests cover nested BioC parsing, journal-evidence scoring, conservative penalties, result selection, card construction, and workflow-event generation.
+- Every pull request runs a moderate-or-higher dependency review across runtime and development dependencies.
+- The local dependency policy requires npm-registry resolution, SHA-512 integrity, approved licenses, and exact version-pinned evidence for any metadata override.
+- CI separately blocks high-severity npm audit findings.
+- CodeQL performs extended JavaScript and TypeScript security analysis.
+- OpenSSF Scorecard runs on the default branch and weekly, publishes results through OIDC, retains SARIF, and uploads findings to GitHub code scanning.
+- CI retains coverage, audit, dependency-review, and production-build Playwright evidence for review.
+- The Playwright flow proves Publisher remains blocked until physician approval and that autonomous releases remain zero.
+
+These controls establish tested software and supply-chain boundaries. They do not establish clinical validity, regulatory clearance, HIPAA compliance, or autonomous publication safety.
+
 ## Local development
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -142,14 +165,18 @@ The default Grounder and Auditor model is `openai/gpt-5.4-mini` through Vercel A
 ## Validation
 
 ```bash
+npm run lint
+npm test
+npm run test:coverage
 npm run test:journals
 npm run test:inbox
 npm run test:ai
 npm run check
 npm run build
+npm run test:e2e
 ```
 
-All regression suites run automatically before every production build.
+All regression suites run automatically before every production build. Pull requests also run dependency review, CodeQL, source-coverage enforcement, and the production-build physician-release browser flow.
 
 ## Backend configuration
 
@@ -179,15 +206,23 @@ The included row-level security policies are permissive for the hackathon and sh
 ## Repository map
 
 ```text
-api/daily-brief.js              cross-journal PubMed triage
-api/process-evidence.js         five-stage evidence processing
-api/ai-evidence.js              schema-bound Grounder, Auditor, and deterministic vetoes
-src/TodaysDermBrief.tsx         daily inbox experience
-src/App.tsx                     EvidenceOps cockpit
-src/lib/insforge.ts             durable run and event persistence
-scripts/test-daily-brief.mjs    ranking regressions
-scripts/test-journals.mjs       journal alias regressions
-scripts/test-ai-governance.mjs  AI grounding and safety-veto regressions
-AI_ARCHITECTURE.md              governed LLM and agent design
-SUBMISSION.md                   pitch, demo, rubric, and checklist
+api/daily-brief.js                    cross-journal PubMed triage
+api/process-evidence.js               five-stage evidence processing and deterministic helpers
+api/ai-evidence.js                    schema-bound Grounder, Auditor, and deterministic vetoes
+src/TodaysDermBrief.tsx               daily inbox experience
+src/App.tsx                           EvidenceOps cockpit
+src/lib/insforge.ts                   durable run and event persistence
+package-lock.json                     reproducible Node 22 dependency graph
+scripts/test-daily-brief.mjs          ranking regressions
+scripts/test-journals.mjs             journal alias regressions
+scripts/test-ai-governance.mjs        AI grounding and safety-veto regressions
+scripts/review-dependency-changes.mjs deterministic dependency policy and retained report
+test/ai-execution.test.mjs            governed Grounder and Auditor execution states
+test/process-domain.test.mjs          BioC, scoring, card, and workflow-event regressions
+.github/workflows/ci.yml              build, coverage, audit, and Playwright evidence
+.github/workflows/dependency-review.yml pull-request dependency review
+.github/workflows/codeql.yml          extended security analysis
+.github/workflows/scorecard.yml       OpenSSF publication and SARIF upload
+AI_ARCHITECTURE.md                    governed LLM and agent design
+SUBMISSION.md                         pitch, demo, rubric, and checklist
 ```
