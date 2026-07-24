@@ -1,0 +1,49 @@
+name: Create DermBrief npm lockfile
+
+on:
+  push:
+    branches: [chore/dermbrief-actions-depth]
+    paths:
+      - 'package.json'
+      - '.github/workflows/create-lockfile.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dermbrief-lockfile-creation
+  cancel-in-progress: false
+
+jobs:
+  create-lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: chore/dermbrief-actions-depth
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Generate and verify lockfile
+        run: |
+          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
+          git diff --check
+
+      - name: Commit lockfile
+        shell: bash
+        run: |
+          changed="$(git status --short)"
+          test "$changed" = '?? package-lock.json'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json
+          git commit -m 'Add reproducible DermBrief npm lockfile'
+          git push origin HEAD:chore/dermbrief-actions-depth
