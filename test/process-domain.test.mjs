@@ -123,7 +123,9 @@ test('falls back to the last substantial sentence and then to a bounded abstract
 
   const short = 'Brief abstract without a substantial sentence.'
   assert.equal(findResultSentence(short), short)
-  assert.equal(findResultSentence('x'.repeat(500)).length, 420)
+
+  const fragmented = 'Short sentence. '.repeat(40)
+  assert.equal(findResultSentence(fragmented), fragmented.slice(0, 420))
 })
 
 test('constructs a bounded high-signal card with a direct source mapping', () => {
