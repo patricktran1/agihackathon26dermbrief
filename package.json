@@ -19,11 +19,11 @@
     "validate": "npm run lint && npm test && npm run test:coverage && npm run check && npm run build"
   },
   "dependencies": {
-    "@insforge/sdk": "1.4.5",
-    "ai": "6.0.224",
-    "lucide-react": "1.25.0",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
+    "@insforge/sdk": "1.5.0",
+    "ai": "7.0.37",
+    "lucide-react": "1.26.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "zod": "4.4.3"
   },
   "devDependencies": {
