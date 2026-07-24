@@ -100,7 +100,10 @@ function fallbackResult(deterministicCard, grounderModel, auditorModel, issues, 
   }
 }
 
-export async function generateAiEvidence(article, appraisal, deterministicCard) {
+export async function generateAiEvidence(article, appraisal, deterministicCard, runtime = {}) {
+  const generateTextFn = runtime.generateText ?? generateText
+  if (typeof generateTextFn !== 'function') throw new TypeError('runtime.generateText must be a function when supplied.')
+
   const grounderModel = process.env.DERMBRIEF_GROUNDER_MODEL || process.env.DERMBRIEF_AI_MODEL || DEFAULT_MODEL
   const auditorModel = process.env.DERMBRIEF_AUDITOR_MODEL || process.env.DERMBRIEF_AI_MODEL || DEFAULT_MODEL
   let grounderAccepted = false
@@ -117,7 +120,7 @@ export async function generateAiEvidence(article, appraisal, deterministicCard) 
   }
 
   try {
-    const { output: draft } = await generateText({
+    const { output: draft } = await generateTextFn({
       model: grounderModel,
       output: Output.object({
         schema: learningCardSchema,
@@ -157,7 +160,7 @@ export async function generateAiEvidence(article, appraisal, deterministicCard) 
 
     grounderAccepted = true
     auditorAttempted = true
-    const { output: audit } = await generateText({
+    const { output: audit } = await generateTextFn({
       model: auditorModel,
       output: Output.object({
         schema: auditSchema,
