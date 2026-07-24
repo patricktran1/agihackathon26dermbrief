@@ -10,6 +10,7 @@ const OFFICIAL_OUTCOME_PATH = 'dependency-review/outcome.txt'
 
 const ALLOWED_LICENSES = new Set([
   '0BSD',
+  '(AFL-2.1 OR BSD-3-Clause)',
   'Apache-2.0',
   'BSD-2-Clause',
   'BSD-3-Clause',
@@ -18,6 +19,16 @@ const ALLOWED_LICENSES = new Set([
   'MIT',
   'MPL-2.0',
   'Python-2.0',
+])
+
+const LICENSE_OVERRIDES = new Map([
+  [
+    'xmlhttprequest-ssl@2.1.2',
+    {
+      license: 'MIT',
+      rationale: 'The published package README declares MIT; package-lock metadata omits the license field.',
+    },
+  ],
 ])
 
 function readJson(path, fallback = null) {
@@ -63,6 +74,16 @@ function hasEntries(value) {
   return false
 }
 
+function licenseEvidence(change) {
+  const reportedLicense = typeof change.license === 'string' ? change.license : null
+  const override = LICENSE_OVERRIDES.get(`${change.name}@${change.version}`) ?? null
+  return {
+    reportedLicense,
+    effectiveLicense: reportedLicense ?? override?.license ?? null,
+    override,
+  }
+}
+
 const headLock = readJson(HEAD_LOCK_PATH)
 if (!headLock) throw new Error('package-lock.json is required for dependency review.')
 
@@ -91,13 +112,15 @@ for (const [path, previous] of basePackages) {
 
 const violations = []
 for (const change of changes.filter((item) => item.kind !== 'removed')) {
-  const license = typeof change.license === 'string' ? change.license : null
-  if (!license || !ALLOWED_LICENSES.has(license)) {
+  const { reportedLicense, effectiveLicense, override } = licenseEvidence(change)
+  if (!effectiveLicense || !ALLOWED_LICENSES.has(effectiveLicense)) {
     violations.push({
       code: 'dependency_license_not_allowed',
       package: change.name,
       version: change.version ?? null,
-      license,
+      reportedLicense,
+      effectiveLicense,
+      overrideApplied: Boolean(override),
     })
   }
 
@@ -150,18 +173,27 @@ const report = {
     allowedRegistry: 'https://registry.npmjs.org/',
     allowedLicenses: [...ALLOWED_LICENSES].sort(),
     auditThreshold: 'moderate',
+    licenseOverrides: [...LICENSE_OVERRIDES].map(([packageVersion, value]) => ({
+      packageVersion,
+      ...value,
+    })),
   },
-  changes: changes.map((change) => ({
-    kind: change.kind,
-    name: change.name,
-    version: change.version ?? null,
-    previousVersion: change.previousVersion ?? null,
-    license: change.license ?? null,
-    dev: Boolean(change.dev),
-    optional: Boolean(change.optional),
-    resolved: change.resolved ?? null,
-    integrity: change.integrity ?? null,
-  })),
+  changes: changes.map((change) => {
+    const { reportedLicense, effectiveLicense, override } = licenseEvidence(change)
+    return {
+      kind: change.kind,
+      name: change.name,
+      version: change.version ?? null,
+      previousVersion: change.previousVersion ?? null,
+      reportedLicense,
+      effectiveLicense,
+      licenseOverrideApplied: Boolean(override),
+      dev: Boolean(change.dev),
+      optional: Boolean(change.optional),
+      resolved: change.resolved ?? null,
+      integrity: change.integrity ?? null,
+    }
+  }),
   auditCounts,
   violations,
   passed: violations.length === 0,
