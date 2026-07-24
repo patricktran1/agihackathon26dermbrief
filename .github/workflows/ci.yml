@@ -24,9 +24,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Clean dependency install
+        run: npm ci --no-audit --no-fund
 
       - name: Capture high-severity dependency audit
         id: audit
@@ -57,7 +59,7 @@ jobs:
       - name: Regression tests
         run: npm test
 
-      - name: Collect coverage baseline
+      - name: Enforced source coverage
         shell: bash
         run: |
           mkdir -p coverage
@@ -91,9 +93,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Clean dependency install
+        run: npm ci --no-audit --no-fund
 
       - name: Build production application
         run: npm run build
