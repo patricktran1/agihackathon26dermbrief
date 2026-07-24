@@ -8,13 +8,15 @@
     "lint": "node --check api/daily-brief.js && node --check api/process-evidence.js && node --check api/ai-evidence.js",
     "test": "node --test test/*.test.mjs",
     "test:coverage": "node --test --experimental-test-coverage test/*.test.mjs",
+    "test:e2e": "playwright test",
     "prebuild": "npm run test:journals && npm run test:inbox && npm run test:ai",
     "build": "tsc -b && vite build",
     "check": "tsc -b --pretty false",
     "test:journals": "node scripts/test-journals.mjs",
     "test:inbox": "node scripts/test-daily-brief.mjs",
     "test:ai": "node scripts/test-ai-governance.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "validate": "npm run lint && npm test && npm run test:coverage && npm run check && npm run build"
   },
   "dependencies": {
     "@insforge/sdk": "1.4.5",
@@ -25,6 +27,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.3",
