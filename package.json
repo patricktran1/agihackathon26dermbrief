@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "lint": "node --check api/daily-brief.js && node --check api/process-evidence.js && node --check api/ai-evidence.js",
+    "lint": "node --check api/daily-brief.js && node --check api/process-evidence.js && node --check api/ai-evidence.js && node --check api/audit-integrity.js && node --check api/audit-manifest.js",
     "test": "node --test test/*.test.mjs",
     "test:coverage": "node --test --experimental-test-coverage test/*.test.mjs",
     "test:e2e": "playwright test",
